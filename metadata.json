@@ -1,0 +1,6 @@
+{
+  "name": "OneDrive Share Uploader",
+  "description": "Android Share Menu inbox for auto uploading documents directly to your preconfigured OneDrive folder.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
