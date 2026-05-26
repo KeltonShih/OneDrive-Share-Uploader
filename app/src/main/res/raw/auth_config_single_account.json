@@ -1,7 +1,7 @@
 {
   "client_id": "00000000-0000-0000-0000-000000000000",
   "authorization_user_agent": "DEFAULT",
-  "redirect_uri": "msauth://com.keltonshih.onedriveshareuploader/YOUR_SIGNATURE_HASH_HERE",
+  "redirect_uri": "msauth://com.keltonshih.onedriveshareuploader/yDRtUMXdQVe3Lt8eXOC8TRTFPH0%3D",
   "account_mode": "SINGLE",
   "broker_redirect_uri_registered": true,
   "authorities": [

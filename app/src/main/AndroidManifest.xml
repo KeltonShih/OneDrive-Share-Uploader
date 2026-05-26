@@ -60,7 +60,11 @@
                 <data
                     android:scheme="msauth"
                     android:host="com.keltonshih.onedriveshareuploader"
-                    android:path="/YOUR_SIGNATURE_HASH" />
+                    android:path="/yDRtUMXdQVe3Lt8eXOC8TRTFPH0=" />
+                <data
+                    android:scheme="msauth"
+                    android:host="com.keltonshih.onedriveshareuploader"
+                    android:path="/yDRtUMXdQVe3Lt8eXOC8TRTFPH0%3D" />
             </intent-filter>
         </activity>
 
