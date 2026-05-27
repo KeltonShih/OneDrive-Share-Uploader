@@ -25,7 +25,7 @@ class DataStoreManager(private val context: Context) {
 
     val appSettingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
         AppSettings(
-            defaultFolder = preferences[DEFAULT_FOLDER_KEY] ?: "/手機快速上傳",
+            defaultFolder = preferences[DEFAULT_FOLDER_KEY] ?: "/Upload",
             conflictBehavior = try {
                 ConflictBehavior.valueOf(preferences[CONFLICT_BEHAVIOR_KEY] ?: ConflictBehavior.RENAME.name)
             } catch (e: Exception) {

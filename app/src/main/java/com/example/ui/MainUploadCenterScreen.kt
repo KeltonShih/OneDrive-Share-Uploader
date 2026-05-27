@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,10 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.auth.AuthState
 import com.example.data.model.UploadJobEntity
 import com.example.data.model.UploadStatus
@@ -34,22 +37,28 @@ import java.util.Locale
 @Composable
 fun MainUploadCenterScreen(
     viewModel: MainViewModel,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onPickFiles: () -> Unit
 ) {
-    val activeQueue by viewModel.activeQueue.collectAsState()
-    val history by viewModel.history.collectAsState()
+    val uploadTasks by viewModel.uploadTasks.collectAsState()
     val authState by viewModel.authState.collectAsState()
+    val settings by viewModel.appSettings.collectAsState()
+    val folderPickerState by viewModel.folderPickerState.collectAsState()
+    val completedCount = uploadTasks.count {
+        it.status == UploadStatus.SUCCESS || it.status == UploadStatus.CANCELED
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_full),
                             contentDescription = null,
-                            modifier = Modifier.padding(end = 8.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier
+                                .size(52.dp)
+                                .padding(end = 12.dp)
                         )
                         Text(
                             text = "OneDrive Share Uploader",
@@ -190,95 +199,131 @@ fun MainUploadCenterScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                // SECTION A: Currently Active Queue Title
                 item {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Current Upload Folder",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = settings.defaultFolder,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            FilledTonalIconButton(
+                                onClick = { viewModel.openFolderPicker() },
+                                enabled = authState is AuthState.SignedIn,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = "Choose upload folder"
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Active Upload Queue",
+                            text = "Upload Queue",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        if (activeQueue.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (completedCount > 0) {
+                                TextButton(
+                                    onClick = { viewModel.clearHistory() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Clear Done", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            FilledTonalButton(
+                                onClick = onPickFiles,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.height(36.dp)
                             ) {
-                                Text(
-                                    text = "${activeQueue.size} " + if (activeQueue.size == 1) "Item" else "Items",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            if (uploadTasks.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${uploadTasks.size} " + if (uploadTasks.size == 1) "Item" else "Items",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                if (activeQueue.isEmpty()) {
+                if (uploadTasks.isEmpty()) {
                     item {
                         EmptyStatePlaceholder(
-                            title = "No Active Uploads",
-                            description = "Files shared to this app will appear here while uploading.",
+                            title = "No Upload Tasks",
+                            description = "Files shared to this app will stay here while queued, uploading, completed, canceled, or failed.",
                             icon = Icons.Default.DriveFolderUpload
                         )
                     }
                 } else {
-                    items(activeQueue, key = { it.id }) { job ->
-                        ActiveJobCard(
+                    items(uploadTasks, key = { it.id }) { job ->
+                        UploadTaskCard(
                             job = job,
                             onRetry = { viewModel.retryJob(job) },
                             onDelete = { viewModel.deleteJob(job) },
-                            modifier = Modifier.animateItemPlacement()
-                        )
-                    }
-                }
-
-                // SECTION B: Completed History Log Title
-                item {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Upload History Record",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        if (history.isNotEmpty()) {
-                            TextButton(
-                                onClick = { viewModel.clearHistory() },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                )
-                            ) {
-                                Text("Clear Past Logs", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-
-                if (history.isEmpty()) {
-                    item {
-                        EmptyStatePlaceholder(
-                            title = "No Completed Uploads Yet",
-                            description = "Your successful and canceled file transfer history records will accumulate here.",
-                            icon = Icons.Default.History
-                        )
-                    }
-                } else {
-                    items(history, key = { it.id }) { historyJob ->
-                        HistoryJobRow(
-                            job = historyJob,
+                            onCancel = { viewModel.cancelJob(job) },
                             modifier = Modifier.animateItemPlacement()
                         )
                     }
@@ -286,128 +331,172 @@ fun MainUploadCenterScreen(
             }
         }
     }
+
+    if (folderPickerState.isOpen) {
+        OneDriveFolderPickerDialog(
+            state = folderPickerState,
+            manualPath = settings.defaultFolder,
+            onDismiss = { viewModel.closeFolderPicker() },
+            onOpenFolder = { folder ->
+                viewModel.loadFolderChildren(folder.id, folder.path)
+            },
+            onUseCurrentFolder = {
+                viewModel.selectFolderFromPicker(folderPickerState.currentPath)
+            },
+            onUseManualFolder = { path ->
+                viewModel.selectFolderFromPicker(path)
+            },
+            onRefresh = {
+                viewModel.loadFolderChildren(
+                    folderPickerState.currentItemId,
+                    folderPickerState.currentPath
+                )
+            },
+            onRoot = {
+                viewModel.loadFolderChildren(null, "")
+            }
+        )
+    }
 }
 
 @Composable
-fun ActiveJobCard(
+fun UploadTaskCard(
     job: UploadJobEntity,
     onRetry: () -> Unit,
     onDelete: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (job.status == UploadStatus.FAILED) {
-        Card(
-            modifier = modifier
-                .fillMaxWidth()
-                .testTag("active_job_card_${job.id}"),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFFFFF1F1) // PolishErrorContainer
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF2B8B5)) // PolishErrorBorder
+    val isFinished = job.status == UploadStatus.SUCCESS || job.status == UploadStatus.CANCELED
+    val isFailed = job.status == UploadStatus.FAILED
+    val savedAsName = job.uploadedFileName?.takeIf {
+        it.isNotBlank() && it != job.sanitizedFileName
+    }
+    val cardColor = when (job.status) {
+        UploadStatus.FAILED -> Color(0xFFFFF1F1)
+        UploadStatus.SUCCESS -> Color(0xFFEFF8F0)
+        UploadStatus.CANCELED -> Color(0xFFF3F4F6)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val borderColor = when (job.status) {
+        UploadStatus.FAILED -> Color(0xFFF2B8B5)
+        UploadStatus.SUCCESS -> Color(0xFFB7DDBB)
+        else -> MaterialTheme.colorScheme.outline
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("upload_task_card_${job.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                        Text(
-                            text = job.originalFileName,
-                            fontWeight = FontWeight.Medium,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF1D1B1E)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Error: ${job.errorMessage ?: "Upload operation failed."}",
-                            color = Color(0xFFB3261E),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Normal,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    
-                    Column(horizontalAlignment = Alignment.End) {
-                        Button(
-                            onClick = onRetry,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFB3261E),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .testTag("retry_button_${job.id}")
-                        ) {
-                            Text("RETRY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                        
-                        Spacer(modifier = Modifier.height(6.dp))
-                        
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .testTag("delete_fail_button_${job.id}")
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        text = job.originalFileName,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Folder: ${job.targetFolder}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = when {
+                            isFailed -> "Error: ${job.errorMessage ?: "Upload operation failed."}"
+                            job.status == UploadStatus.SUCCESS -> "Completed ${formatDateTime(job.completedAt)}"
+                            job.status == UploadStatus.CANCELED -> job.errorMessage ?: "Canceled"
+                            !job.errorMessage.isNullOrBlank() -> job.errorMessage
+                            else -> statusLabel(job.status)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isFailed) Color(0xFFB3261E) else MaterialTheme.colorScheme.primary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (job.status == UploadStatus.SUCCESS && savedAsName != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Job",
-                                tint = Color(0xFFB3261E).copy(alpha = 0.7f),
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFB26A00),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Renamed: $savedAsName",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF8A5200),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
-            }
-        }
-    } else {
-        Card(
-            modifier = modifier
-                .fillMaxWidth()
-                .testTag("active_job_card_${job.id}"),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Header Name & Action Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = job.originalFileName,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "To: ${job.targetFolder}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    StatusBadge(status = job.status)
-                }
 
-                // Normal progress bars
+                Column(horizontalAlignment = Alignment.End) {
+                    StatusBadge(status = job.status)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    when {
+                        job.status == UploadStatus.QUEUED || job.status == UploadStatus.UPLOADING || job.status == UploadStatus.COPYING -> {
+                            TextButton(
+                                onClick = onCancel,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Cancel", fontSize = 12.sp)
+                            }
+                        }
+                        isFailed && job.localCachePath.isNotBlank() -> {
+                            Button(
+                                onClick = onRetry,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFB3261E),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("RETRY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        isFinished || isFailed -> {
+                            TextButton(
+                                onClick = onDelete,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Clear", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!isFinished && !isFailed) {
                 val progressFloat = job.progress / 100f
                 LinearProgressIndicator(
                     progress = { progressFloat },
@@ -418,25 +507,25 @@ fun ActiveJobCard(
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFE6E1E5)
                 )
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = formatMemorySize(job.uploadedBytes, job.fileSize),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${job.progress}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatTaskSizeText(job),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (isFinished || isFailed) statusLabel(job.status) else "${job.progress}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -593,6 +682,25 @@ fun formatMemorySize(uploadedBytes: Long, fileSize: Long): String {
     return "$up $upUnit / $tot $totUnit"
 }
 
+fun formatTaskSizeText(job: UploadJobEntity): String {
+    val (total, totalUnit) = formatBytes(job.fileSize)
+    val totalText = "$total $totalUnit"
+    val isDone = job.status == UploadStatus.SUCCESS ||
+        job.status == UploadStatus.CANCELED ||
+        job.status == UploadStatus.FAILED
+
+    if (isDone) {
+        return "Size $totalText"
+    }
+
+    if (job.errorMessage?.contains("Finalizing", ignoreCase = true) == true) {
+        return "Sent $totalText, finalizing..."
+    }
+
+    val (uploaded, uploadedUnit) = formatBytes(job.uploadedBytes)
+    return "Uploaded $uploaded $uploadedUnit of $totalText"
+}
+
 fun formatBytes(bytes: Long): Pair<String, String> {
     if (bytes < 1024) return Pair("$bytes", "B")
     val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
@@ -605,4 +713,15 @@ fun formatDateTime(timestamp: Long?): String {
     if (timestamp == null) return ""
     val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     return df.format(Date(timestamp))
+}
+
+fun statusLabel(status: UploadStatus): String {
+    return when (status) {
+        UploadStatus.COPYING -> "Copying"
+        UploadStatus.QUEUED -> "Queued"
+        UploadStatus.UPLOADING -> "Uploading"
+        UploadStatus.SUCCESS -> "Completed"
+        UploadStatus.FAILED -> "Failed"
+        UploadStatus.CANCELED -> "Canceled"
+    }
 }

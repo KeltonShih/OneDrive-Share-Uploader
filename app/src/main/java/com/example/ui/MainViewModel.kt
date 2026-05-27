@@ -2,6 +2,7 @@ package com.example.ui
 
 import android.app.Activity
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
@@ -18,12 +19,44 @@ import com.example.data.model.ConflictBehavior
 import com.example.data.model.UploadJobEntity
 import com.example.data.model.UploadStatus
 import com.example.data.repository.UploadRepository
+import com.example.util.FileHelper
+import com.example.util.FolderResolver
 import com.example.worker.UploadWorker
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
+import java.net.URLEncoder
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+data class OneDriveFolder(
+    val id: String,
+    val name: String,
+    val path: String
+)
+
+data class FolderPickerUiState(
+    val isOpen: Boolean = false,
+    val isLoading: Boolean = false,
+    val folders: List<OneDriveFolder> = emptyList(),
+    val currentItemId: String? = null,
+    val currentPath: String = "",
+    val errorMessage: String? = null
+)
+
+data class AddFilesResult(
+    val addedCount: Int,
+    val failedCount: Int
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -32,8 +65,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = UploadRepository(db.uploadJobDao())
     private val dataStoreManager = DataStoreManager(context)
     private val msalAuthManager = MsalAuthManager.getInstance(context)
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
 
-    val activeQueue: StateFlow<List<UploadJobEntity>> = repository.activeQueue
+    val uploadTasks: StateFlow<List<UploadJobEntity>> = repository.allJobs
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -61,6 +98,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = AuthState.Uninitialized
         )
 
+    private val _folderPickerState = MutableStateFlow(FolderPickerUiState())
+    val folderPickerState: StateFlow<FolderPickerUiState> = _folderPickerState
+
     fun triggerWorkManager() {
         val settings = appSettings.value
         val constraints = Constraints.Builder()
@@ -74,7 +114,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .build()
 
         WorkManager.getInstance(context)
-            .enqueueUniqueWork("OneDriveUploader", ExistingWorkPolicy.KEEP, uploadWorkRequest)
+            .enqueueUniqueWork("OneDriveUploader", ExistingWorkPolicy.REPLACE, uploadWorkRequest)
+    }
+
+    fun addSelectedFiles(uris: List<Uri>, onResult: (AddFilesResult) -> Unit) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            var addedCount = 0
+            var failedCount = 0
+
+            withContext(Dispatchers.IO) {
+                for (uri in uris) {
+                    runCatching {
+                        val originalName = FileHelper.queryDisplayName(context, uri)
+                        val sanitizedName = FileHelper.sanitizeFileName(originalName)
+                        val mimeType = FileHelper.getMimeType(context, uri)
+                        val targetFolder = FolderResolver.resolveTargetFolder(sanitizedName, mimeType, settings)
+                        val fileSize = FileHelper.queryFileSize(context, uri)
+                        val cacheFile = FileHelper.copyUriToCache(context, uri, sanitizedName)
+                        val finalSize = if (fileSize > 0) fileSize else cacheFile.length()
+                        val now = System.currentTimeMillis()
+                        val job = UploadJobEntity(
+                            id = UUID.randomUUID().toString(),
+                            localCachePath = cacheFile.absolutePath,
+                            originalFileName = originalName,
+                            sanitizedFileName = sanitizedName,
+                            mimeType = mimeType,
+                            fileSize = finalSize,
+                            targetFolder = targetFolder,
+                            status = UploadStatus.QUEUED,
+                            progress = 0,
+                            uploadedBytes = 0L,
+                            totalBytes = finalSize,
+                            errorMessage = "Queued for upload.",
+                            uploadedFileName = null,
+                            createdAt = now,
+                            updatedAt = now,
+                            completedAt = null,
+                            retryCount = 0
+                        )
+                        repository.insertJob(job)
+                    }.onSuccess {
+                        addedCount++
+                    }.onFailure { error ->
+                        val originalName = runCatching { FileHelper.queryDisplayName(context, uri) }
+                            .getOrElse { uri.lastPathSegment ?: "unreadable_shared_file" }
+                        val sanitizedName = FileHelper.sanitizeFileName(originalName)
+                        val mimeType = runCatching { FileHelper.getMimeType(context, uri) }
+                            .getOrDefault("application/octet-stream")
+                        val targetFolder = FolderResolver.resolveTargetFolder(sanitizedName, mimeType, settings)
+                        val now = System.currentTimeMillis()
+                        val failedJob = UploadJobEntity(
+                            id = UUID.randomUUID().toString(),
+                            localCachePath = "",
+                            originalFileName = originalName,
+                            sanitizedFileName = sanitizedName,
+                            mimeType = mimeType,
+                            fileSize = 0L,
+                            targetFolder = targetFolder,
+                            status = UploadStatus.FAILED,
+                            progress = 0,
+                            uploadedBytes = 0L,
+                            totalBytes = 0L,
+                            errorMessage = error.message
+                                ?: FileHelper.unreadableSourceMessage(uri),
+                            uploadedFileName = null,
+                            createdAt = now,
+                            updatedAt = now,
+                            completedAt = null,
+                            retryCount = 0
+                        )
+                        repository.insertJob(failedJob)
+                        failedCount++
+                    }
+                }
+            }
+
+            if (addedCount > 0) {
+                triggerWorkManager()
+            }
+            onResult(AddFilesResult(addedCount, failedCount))
+        }
     }
 
     fun retryJob(job: UploadJobEntity) {
@@ -105,11 +225,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun cancelJob(job: UploadJobEntity) {
+        viewModelScope.launch {
+            repository.markJobCanceled(job.id, "Upload canceled by user.", System.currentTimeMillis())
+            WorkManager.getInstance(context).cancelUniqueWork("OneDriveUploader")
+            if (job.status != UploadStatus.UPLOADING) {
+                try {
+                    val file = File(job.localCachePath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (e: Exception) {
+                    // Ignore cache cleanup failures.
+                }
+            }
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch {
             repository.clearHistory()
         }
     }
+
 
     fun updateDefaultFolder(folder: String) {
         viewModelScope.launch {
@@ -136,6 +274,108 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             dataStoreManager.updateRulesEnabled(rulesEnabled)
         }
     }
+
+    fun openFolderPicker() {
+        _folderPickerState.value = FolderPickerUiState(isOpen = true, isLoading = true)
+        loadFolderChildren(itemId = null, path = "")
+    }
+
+    fun closeFolderPicker() {
+        _folderPickerState.value = FolderPickerUiState()
+    }
+
+    fun loadFolderChildren(itemId: String?, path: String) {
+        viewModelScope.launch {
+            _folderPickerState.value = _folderPickerState.value.copy(
+                isOpen = true,
+                isLoading = true,
+                currentItemId = itemId,
+                currentPath = path,
+                errorMessage = null
+            )
+
+            val result = withContext(Dispatchers.IO) {
+                runCatching { fetchOneDriveFolders(itemId, path) }
+            }
+
+            _folderPickerState.value = result.fold(
+                onSuccess = { folders ->
+                    _folderPickerState.value.copy(isLoading = false, folders = folders)
+                },
+                onFailure = { error ->
+                    _folderPickerState.value.copy(
+                        isLoading = false,
+                        folders = emptyList(),
+                        errorMessage = error.message ?: "Could not load OneDrive folders."
+                    )
+                }
+            )
+        }
+    }
+
+    fun selectFolderFromPicker(path: String) {
+        val normalized = normalizeFolderPath(path)
+        updateDefaultFolder(normalized)
+        closeFolderPicker()
+    }
+
+    private suspend fun fetchOneDriveFolders(itemId: String?, parentPath: String): List<OneDriveFolder> {
+        val token = msalAuthManager.getAccessTokenSilently()
+            ?: throw IllegalStateException("Please sign in to OneDrive before browsing folders.")
+
+        val endpoint = if (itemId == null) {
+            "https://graph.microsoft.com/v1.0/me/drive/root/children"
+        } else {
+            "https://graph.microsoft.com/v1.0/me/drive/items/${urlEncode(itemId)}/children"
+        }
+        val url = "$endpoint?\$select=id,name,folder&\$orderby=name"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException(parseGraphError(body, response.code))
+            }
+
+            val values = JSONObject(body).optJSONArray("value") ?: return emptyList()
+            return buildList {
+                for (i in 0 until values.length()) {
+                    val item = values.getJSONObject(i)
+                    if (!item.has("folder")) continue
+                    val name = item.optString("name")
+                    val id = item.optString("id")
+                    if (name.isBlank() || id.isBlank()) continue
+                    val childPath = joinFolderPath(parentPath, name)
+                    add(OneDriveFolder(id = id, name = name, path = childPath))
+                }
+            }
+        }
+    }
+
+    private fun parseGraphError(body: String, code: Int): String {
+        return try {
+            val error = JSONObject(body).getJSONObject("error")
+            error.optString("message", "Microsoft Graph error HTTP $code")
+        } catch (e: Exception) {
+            "Microsoft Graph error HTTP $code"
+        }
+    }
+
+    private fun normalizeFolderPath(path: String): String {
+        val trimmed = path.trim().trim('/')
+        return if (trimmed.isBlank()) "/" else "/$trimmed"
+    }
+
+    private fun joinFolderPath(parentPath: String, childName: String): String {
+        val cleanParent = parentPath.trim().trim('/')
+        return if (cleanParent.isBlank()) "/$childName" else "/$cleanParent/$childName"
+    }
+
+    private fun urlEncode(value: String): String =
+        URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     fun signIn(activity: Activity, onResult: (Result<Unit>) -> Unit) {
         msalAuthManager.signIn(activity) { result ->

@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.pm.ServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -12,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.MainActivity
 import com.example.auth.MsalAuthManager
@@ -25,15 +27,16 @@ import com.example.util.ProgressRequestBody
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Call
+import okhttp3.ConnectionPool
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.RandomAccessFile
-import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.withTimeoutOrNull
 
 class UploadWorker(
     private val context: Context,
@@ -58,10 +61,15 @@ class UploadWorker(
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(90, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
         .build()
 
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    @Volatile
+    private var activeCall: Call? = null
 
     init {
         createNotificationChannel()
@@ -70,6 +78,7 @@ class UploadWorker(
     override suspend fun doWork(): Result {
         // Run as Foreground Service to keep it alive
         setForeground(getForegroundInfo())
+        repository.resetUploadingJobsToQueued(System.currentTimeMillis())
 
         var loop = true
         while (loop) {
@@ -98,20 +107,25 @@ class UploadWorker(
         val uploadingJob = job.copy(
             status = UploadStatus.UPLOADING,
             progress = 0,
+            errorMessage = "Initializing upload...",
             updatedAt = System.currentTimeMillis()
         )
         repository.updateJob(uploadingJob)
         updateForegroundNotification(uploadingJob, "Initializing...")
 
         // 2. Fetch MSAL Access Token
-        val token = msalAuthManager.getAccessTokenSilently()
+        updateJobStage(uploadingJob, "Getting Microsoft access token...")
+        val token = withTimeoutOrNull(30_000L) {
+            msalAuthManager.getAccessTokenSilently()
+        }
         if (token == null) {
-            val error = "Microsoft account not signed in. Please sign in in Settings."
+            val error = "Could not get Microsoft access token. Open Settings, confirm sign-in, then retry."
             markJobFailed(uploadingJob, error)
             return
         }
 
         val cacheFile = File(uploadingJob.localCachePath)
+        updateJobStage(uploadingJob, "Checking local cached file...")
         if (!cacheFile.exists()) {
             markJobFailed(uploadingJob, "Temp cache file not found")
             return
@@ -133,16 +147,14 @@ class UploadWorker(
 
         // 3. Resolve destination URL path
         val cleanFolder = uploadingJob.targetFolder.trim('/')
-        val encodedPath = if (cleanFolder.isEmpty()) {
-            FileHelper.encodeGraphPathSegment(uploadingJob.sanitizedFileName)
-        } else {
-            "${FileHelper.encodeGraphFolderPath(cleanFolder)}/${FileHelper.encodeGraphPathSegment(uploadingJob.sanitizedFileName)}"
-        }
+        val encodedPath = buildEncodedPath(cleanFolder, uploadingJob.sanitizedFileName)
 
         // Decide Upload API: Small PUT (<= 250MB) vs chunked Session (> 250MB)
         if (fileLength <= 250 * 1024 * 1024) {
+            updateJobStage(uploadingJob, "Uploading to Microsoft Graph...")
             uploadSmallFile(uploadingJob, token, cacheFile, encodedPath, conflictBehaviorStr)
         } else {
+            updateJobStage(uploadingJob, "Creating large-file upload session...")
             uploadLargeFile(uploadingJob, token, cacheFile, encodedPath, conflictBehaviorStr)
         }
     }
@@ -161,14 +173,16 @@ class UploadWorker(
         
         var lastUpdate = 0L
         val progressBody = ProgressRequestBody(file, mediaType) { written, total ->
-            val progressPercent = if (total > 0L) ((written * 100) / total).toInt() else 0
+            val rawProgress = if (total > 0L) ((written * 100) / total).toInt() else 0
+            val progressPercent = rawProgress.coerceAtMost(99)
             val now = System.currentTimeMillis()
-            if (now - lastUpdate > 500L || progressPercent == 100) {
+            if (now - lastUpdate > 500L) {
                 lastUpdate = now
                 val updated = job.copy(
                     progress = progressPercent,
                     uploadedBytes = written,
                     totalBytes = total,
+                    errorMessage = "Uploading small file... $progressPercent%",
                     updatedAt = now
                 )
                 // Direct DB update using runBlocking from OkHttp's writer thread pool context
@@ -185,9 +199,10 @@ class UploadWorker(
             .addHeader("Authorization", "Bearer $token")
             .build()
 
-        okHttpClient.newCall(request).execute().use { response ->
+        executeRequest(request).use { response ->
             if (response.isSuccessful) {
-                markJobSuccess(job)
+                val responseBody = response.body?.string()
+                markJobSuccess(job, parseDriveItemName(responseBody))
             } else {
                 val errorBody = response.body?.string() ?: ""
                 val errorMessage = parseErrorMessage(response, errorBody)
@@ -222,7 +237,7 @@ class UploadWorker(
             .build()
 
         var uploadUrl: String? = null
-        okHttpClient.newCall(sessionRequest).execute().use { response ->
+        executeRequest(sessionRequest).use { response ->
             if (response.isSuccessful) {
                 val respJson = JSONObject(response.body?.string() ?: "")
                 uploadUrl = respJson.getString("uploadUrl")
@@ -245,6 +260,7 @@ class UploadWorker(
         val buffer = ByteArray(CHUNK_SIZE)
         val fileReader = RandomAccessFile(file, "r")
         var bytesUploaded: Long = 0
+        var uploadedFileName: String? = null
 
         try {
             while (bytesUploaded < totalBytes) {
@@ -268,19 +284,28 @@ class UploadWorker(
                     .addHeader("Content-Length", bytesRead.toString())
                     .build()
 
-                okHttpClient.newCall(chunkRequest).execute().use { chunkResponse ->
+                executeRequest(chunkRequest).use { chunkResponse ->
                     val code = chunkResponse.code
                     if (code == 200 || code == 201 || code == 202) {
+                        val responseBody = chunkResponse.body?.string()
+                        if (code == 200 || code == 201) {
+                            uploadedFileName = parseDriveItemName(responseBody)
+                        }
                         bytesUploaded += bytesRead
-                        val progressPercent = ((bytesUploaded * 100) / totalBytes).toInt()
+                        val rawProgress = ((bytesUploaded * 100) / totalBytes).toInt()
+                        val progressPercent = rawProgress.coerceAtMost(99)
                         val updated = job.copy(
                             progress = progressPercent,
                             uploadedBytes = bytesUploaded,
                             totalBytes = totalBytes,
+                            errorMessage = if (rawProgress >= 100) "Finalizing upload..." else "Uploading chunk... $progressPercent%",
                             updatedAt = System.currentTimeMillis()
                         )
                         repository.updateJob(updated)
-                        updateForegroundNotification(updated, "Uploading chunk... $progressPercent%")
+                        updateForegroundNotification(
+                            updated,
+                            if (rawProgress >= 100) "Finalizing..." else "Uploading chunk... $progressPercent%"
+                        )
                     } else {
                         val errorBody = chunkResponse.body?.string() ?: ""
                         val chunkError = "Chunk upload failed: ${chunkResponse.message} - $errorBody"
@@ -291,16 +316,26 @@ class UploadWorker(
             }
 
             // Finish
-            markJobSuccess(job)
+            markJobSuccess(job, uploadedFileName)
         } finally {
             try { fileReader.close() } catch (ignored: Exception) {}
         }
     }
 
-    private suspend fun markJobSuccess(job: UploadJobEntity) {
+    private fun buildEncodedPath(cleanFolder: String, fileName: String): String {
+        return if (cleanFolder.isEmpty()) {
+            FileHelper.encodeGraphPathSegment(fileName)
+        } else {
+            "${FileHelper.encodeGraphFolderPath(cleanFolder)}/${FileHelper.encodeGraphPathSegment(fileName)}"
+        }
+    }
+
+    private suspend fun markJobSuccess(job: UploadJobEntity, uploadedFileName: String?) {
         val successJob = job.copy(
             status = UploadStatus.SUCCESS,
             progress = 100,
+            errorMessage = null,
+            uploadedFileName = uploadedFileName ?: job.uploadedFileName,
             updatedAt = System.currentTimeMillis(),
             completedAt = System.currentTimeMillis()
         )
@@ -321,9 +356,33 @@ class UploadWorker(
             errorMessage = error,
             retryCount = job.retryCount + 1,
             updatedAt = System.currentTimeMillis(),
-            completedAt = System.currentTimeMillis()
+            completedAt = null
         )
         repository.updateJob(failedJob)
+    }
+
+    private suspend fun updateJobStage(job: UploadJobEntity, message: String) {
+        repository.updateJob(
+            job.copy(
+                errorMessage = message,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    private fun executeRequest(request: Request): Response {
+        if (isStopped) {
+            throw InterruptedException("Upload was cancelled")
+        }
+        val call = okHttpClient.newCall(request)
+        activeCall = call
+        return try {
+            call.execute()
+        } finally {
+            if (activeCall === call) {
+                activeCall = null
+            }
+        }
     }
 
     private fun parseErrorMessage(response: Response, body: String): String {
@@ -340,12 +399,28 @@ class UploadWorker(
         }
     }
 
+    private fun parseDriveItemName(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        return runCatching {
+            JSONObject(body).optString("name").takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
     // ==========================================
     // NOTIFICATION & FOREGROUND INFO MANAGEMENT
     // ==========================================
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        return ForegroundInfo(NOTIFICATION_ID, createNotification("Queue is initialized", "Preparing uploads..."))
+        val notification = createNotification("Queue is initialized", "Preparing uploads...")
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotification(title: String, text: String): Notification {
@@ -358,6 +433,7 @@ class UploadWorker(
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val cancelIntent = WorkManager.getInstance(context).createCancelPendingIntent(id)
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
@@ -366,6 +442,7 @@ class UploadWorker(
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
@@ -413,4 +490,5 @@ class UploadWorker(
             notificationManager.createNotificationChannel(channel)
         }
     }
+
 }

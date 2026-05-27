@@ -5,7 +5,7 @@ import com.example.data.model.UploadJobEntity
 import kotlinx.coroutines.flow.Flow
 
 class UploadRepository(private val uploadJobDao: UploadJobDao) {
-    val activeQueue: Flow<List<UploadJobEntity>> = uploadJobDao.getActiveQueueFlow()
+    val allJobs: Flow<List<UploadJobEntity>> = uploadJobDao.getAllJobsFlow()
     val history: Flow<List<UploadJobEntity>> = uploadJobDao.getHistoryFlow()
 
     suspend fun getJobById(id: String): UploadJobEntity? = uploadJobDao.getJobById(id)
@@ -19,4 +19,9 @@ class UploadRepository(private val uploadJobDao: UploadJobDao) {
     suspend fun clearHistory() = uploadJobDao.clearHistory()
 
     suspend fun getNextQueuedJob(): UploadJobEntity? = uploadJobDao.getNextQueuedJob()
+
+    suspend fun resetUploadingJobsToQueued(now: Long) = uploadJobDao.resetUploadingJobsToQueued(now)
+
+    suspend fun markJobCanceled(id: String, message: String, now: Long) =
+        uploadJobDao.markJobCanceled(id, message, now)
 }

@@ -14,6 +14,8 @@ import java.util.Locale
 import java.util.UUID
 
 object FileHelper {
+    private const val COPY_ATTEMPTS = 5
+    private const val COPY_RETRY_DELAY_MS = 700L
 
     fun queryDisplayName(context: Context, uri: Uri): String {
         var name: String? = null
@@ -114,13 +116,43 @@ object FileHelper {
         val cacheDir = context.cacheDir
         val uniquePrefix = UUID.randomUUID().toString().take(8)
         val destinationFile = File(cacheDir, "${uniquePrefix}_${sanitizedName}")
-        
-        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            FileOutputStream(destinationFile).use { outputStream ->
-                inputStream.copyTo(outputStream)
-            }
-        } ?: throw Exception("Failed to open input stream for URI: $uri")
 
-        return destinationFile
+        var lastError: Exception? = null
+        repeat(COPY_ATTEMPTS) { attempt ->
+            try {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    FileOutputStream(destinationFile).use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                } ?: throw Exception("Failed to open input stream for URI: $uri")
+
+                if (destinationFile.length() > 0L || queryFileSize(context, uri) == 0L) {
+                    return destinationFile
+                }
+                throw Exception("Provider returned an empty file stream.")
+            } catch (e: Exception) {
+                lastError = e
+                if (destinationFile.exists()) {
+                    destinationFile.delete()
+                }
+                if (attempt < COPY_ATTEMPTS - 1) {
+                    Thread.sleep(COPY_RETRY_DELAY_MS)
+                }
+            }
+        }
+
+        throw Exception(
+            unreadableSourceMessage(uri),
+            lastError
+        )
+    }
+
+    fun unreadableSourceMessage(uri: Uri): String {
+        val authority = uri.authority.orEmpty().lowercase()
+        return if (authority.contains("line") || authority.contains("naver")) {
+            "LINE has not downloaded this file yet. Open the file in LINE once, wait for it to finish loading, then share it again."
+        } else {
+            "File is not readable yet. It may still be downloading in the source app. Try again after the file finishes downloading."
+        }
     }
 }

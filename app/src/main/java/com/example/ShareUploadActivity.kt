@@ -18,21 +18,9 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.auth.AuthState
-import com.example.auth.MsalAuthManager
-import com.example.data.local.AppDatabase
-import com.example.data.local.DataStoreManager
-import com.example.data.model.UploadJobEntity
-import com.example.data.model.UploadStatus
-import com.example.util.FileHelper
-import com.example.util.FolderResolver
+import androidx.lifecycle.ViewModelProvider
+import com.example.ui.MainViewModel
 import com.example.worker.UploadWorker
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.util.UUID
 
 class ShareUploadActivity : ComponentActivity() {
 
@@ -77,19 +65,23 @@ class ShareUploadActivity : ComponentActivity() {
 
     private fun handleShareIntent() {
         val action = intent.action
-        val type = intent.type
 
-        val uris = mutableListOf<Uri>()
+        val uris = linkedSetOf<Uri>()
 
-        if (Intent.ACTION_SEND == action && type != null) {
-            val streamUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            if (streamUri != null) {
-                uris.add(streamUri)
-            }
-        } else if (Intent.ACTION_SEND_MULTIPLE == action && type != null) {
+        if (Intent.ACTION_SEND == action) {
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.add(it) }
+        } else if (Intent.ACTION_SEND_MULTIPLE == action) {
             val list = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
             if (list != null) {
                 uris.addAll(list.filterNotNull())
+            }
+        } else if (Intent.ACTION_VIEW == action) {
+            intent.data?.let { uris.add(it) }
+        }
+
+        intent.clipData?.let { clipData ->
+            for (index in 0 until clipData.itemCount) {
+                clipData.getItemAt(index).uri?.let { uris.add(it) }
             }
         }
 
@@ -99,130 +91,43 @@ class ShareUploadActivity : ComponentActivity() {
             return
         }
 
-        processAndQueueSharedUris(uris)
+        processAndQueueSharedUris(uris.toList())
     }
 
     private fun processAndQueueSharedUris(uris: List<Uri>) {
-        lifecycleScope.launch {
-            val db = AppDatabase.getDatabase(this@ShareUploadActivity)
-            val repository = db.uploadJobDao()
-            val dataStore = DataStoreManager(this@ShareUploadActivity)
-            val authManager = MsalAuthManager.getInstance(this@ShareUploadActivity)
-
-            // 1. Fetch current settings & authentication status
-            val settings = dataStore.appSettingsFlow.first()
-            val authState = authManager.authStateFlow.first()
-            val isLoggedIn = authState is AuthState.SignedIn
-
-            var successCopiedCount = 0
-            val jobsToInsert = mutableListOf<UploadJobEntity>()
-
-            withContext(Dispatchers.IO) {
-                for (uri in uris) {
-                    try {
-                        val originalName = FileHelper.queryDisplayName(this@ShareUploadActivity, uri)
-                        val sanitizedName = FileHelper.sanitizeFileName(originalName)
-                        val fileSize = FileHelper.queryFileSize(this@ShareUploadActivity, uri)
-                        val mimeType = FileHelper.getMimeType(this@ShareUploadActivity, uri)
-                        val targetFolder = FolderResolver.resolveTargetFolder(sanitizedName, mimeType, settings)
-
-                        // Copy to secure private local app cache first (MANDATORY standard)
-                        val cacheFile = FileHelper.copyUriToCache(this@ShareUploadActivity, uri, sanitizedName)
-                        
-                        // Decide initial status
-                        val (initialStatus, errorText) = if (isLoggedIn) {
-                            Pair(UploadStatus.QUEUED, null)
-                        } else {
-                            // Authentic required as per instruction Section XIII
-                            Pair(UploadStatus.FAILED, "Microsoft account not signed in. Please log in in Settings.")
-                        }
-
-                        val now = System.currentTimeMillis()
-                        val uploaderJob = UploadJobEntity(
-                            id = UUID.randomUUID().toString(),
-                            localCachePath = cacheFile.absolutePath,
-                            originalFileName = originalName,
-                            sanitizedFileName = sanitizedName,
-                            mimeType = mimeType,
-                            fileSize = if (fileSize > 0) fileSize else cacheFile.length(),
-                            targetFolder = targetFolder,
-                            status = initialStatus,
-                            progress = 0,
-                            uploadedBytes = 0L,
-                            totalBytes = if (fileSize > 0) fileSize else cacheFile.length(),
-                            errorMessage = errorText,
-                            createdAt = now,
-                            updatedAt = now,
-                            completedAt = null,
-                            retryCount = 0
-                        )
-
-                        repository.insertJob(uploaderJob)
-                        successCopiedCount++
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed copy for shared URI: $uri", e)
+        val viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        viewModel.addSelectedFiles(uris) { result ->
+            try {
+                when {
+                    result.addedCount > 0 -> {
+                        Toast.makeText(
+                            this@ShareUploadActivity,
+                            if (result.failedCount > 0) {
+                                "Added ${result.addedCount} file(s). ${result.failedCount} file(s) need attention."
+                            } else {
+                                "Added ${result.addedCount} file(s) to OneDrive queue!"
+                            },
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    else -> {
+                        Toast.makeText(
+                            this@ShareUploadActivity,
+                            "Failed to process shared files.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
-            }
-
-            // Toast feedback
-            if (successCopiedCount > 0) {
-                if (isLoggedIn) {
-                    Toast.makeText(
-                        this@ShareUploadActivity,
-                        "Added $successCopiedCount file(s) to OneDrive queue!",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    // Start background uploading worker
-                    triggerWorkManager(settings.wifiOnly)
-
-                    // Return to MainActivity
-                    val mainIntent = Intent(this@ShareUploadActivity, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    }
-                    startActivity(mainIntent)
-                } else {
-                    Toast.makeText(
-                        this@ShareUploadActivity,
-                        "Parsed $successCopiedCount file(s), but Microsoft Login is required.",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    // Redirect to Settings Screen in MainActivity
-                    val mainIntent = Intent(this@ShareUploadActivity, MainActivity::class.java).apply {
-                        putExtra("NAVIGATE_TO_SETTINGS", true)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    }
-                    startActivity(mainIntent)
-                }
-            } else {
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected share processing failure", e)
                 Toast.makeText(
                     this@ShareUploadActivity,
-                    "Failed to process shared files.",
+                    "Share failed: ${e.message ?: "Unknown error"}",
                     Toast.LENGTH_LONG
                 ).show()
-                // Redirect back to main
-                val mainIntent = Intent(this@ShareUploadActivity, MainActivity::class.java)
-                startActivity(mainIntent)
+            } finally {
+                finish()
             }
-
-            finish()
         }
-    }
-
-    private fun triggerWorkManager(wifiOnly: Boolean) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(
-                if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
-            )
-            .build()
-
-        val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this)
-            .enqueueUniqueWork("OneDriveUploader", ExistingWorkPolicy.KEEP, uploadWorkRequest)
     }
 }

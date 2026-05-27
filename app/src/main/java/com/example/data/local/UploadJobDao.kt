@@ -13,22 +13,13 @@ interface UploadJobDao {
 
     @Query("""
         SELECT * FROM upload_jobs 
-        WHERE status IN ('COPYING', 'QUEUED', 'UPLOADING', 'FAILED') 
-        ORDER BY 
-            CASE status 
-                WHEN 'UPLOADING' THEN 1 
-                WHEN 'COPYING' THEN 2 
-                WHEN 'QUEUED' THEN 3 
-                WHEN 'FAILED' THEN 4 
-                ELSE 5 
-            END, 
-            updatedAt DESC
+        ORDER BY createdAt DESC
     """)
-    fun getActiveQueueFlow(): Flow<List<UploadJobEntity>>
+    fun getAllJobsFlow(): Flow<List<UploadJobEntity>>
 
     @Query("""
         SELECT * FROM upload_jobs 
-        WHERE status IN ('SUCCESS', 'CANCELED', 'FAILED') AND completedAt IS NOT NULL 
+        WHERE status IN ('SUCCESS', 'CANCELED') AND completedAt IS NOT NULL 
         ORDER BY completedAt DESC
     """)
     fun getHistoryFlow(): Flow<List<UploadJobEntity>>
@@ -36,8 +27,21 @@ interface UploadJobDao {
     @Query("SELECT * FROM upload_jobs WHERE id = :id")
     suspend fun getJobById(id: String): UploadJobEntity?
 
-    @Query("SELECT * FROM upload_jobs WHERE status = 'QUEUED' LIMIT 1")
+    @Query("SELECT * FROM upload_jobs WHERE status = 'QUEUED' ORDER BY createdAt ASC LIMIT 1")
     suspend fun getNextQueuedJob(): UploadJobEntity?
+
+    @Query("UPDATE upload_jobs SET status = 'QUEUED', updatedAt = :now WHERE status = 'UPLOADING'")
+    suspend fun resetUploadingJobsToQueued(now: Long)
+
+    @Query("""
+        UPDATE upload_jobs
+        SET status = 'CANCELED',
+            errorMessage = :message,
+            updatedAt = :now,
+            completedAt = :now
+        WHERE id = :id
+    """)
+    suspend fun markJobCanceled(id: String, message: String, now: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertJob(job: UploadJobEntity)

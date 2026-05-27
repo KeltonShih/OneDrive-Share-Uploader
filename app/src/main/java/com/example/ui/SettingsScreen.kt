@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,15 +25,12 @@ import com.example.data.model.ConflictBehavior
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToAbout: () -> Unit
 ) {
     val context = LocalContext.current
     val settings by viewModel.appSettings.collectAsState()
     val authState by viewModel.authState.collectAsState()
-
-    var defaultFolderEdit by remember(settings.defaultFolder) {
-        mutableStateFlowOf(settings.defaultFolder)
-    }
 
     Scaffold(
         topBar = {
@@ -174,68 +172,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 2: Upload Paths & Target folders
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = "Folder Settings",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Destination Configuration",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    Text(
-                        text = "Default Upload Folder Path",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-
-                    OutlinedTextField(
-                        value = defaultFolderEdit,
-                        onValueChange = {
-                            defaultFolderEdit = it
-                            // Keep it normalized with a leading slash
-                            val normalized = if (it.startsWith("/")) it else "/$it"
-                            viewModel.updateDefaultFolder(normalized)
-                        },
-                        placeholder = { Text("/手機快速上傳") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("default_folder_input"),
-                        singleLine = true,
-                        leadingIcon = {
-                            Icon(Icons.Default.DriveFileMove, contentDescription = null)
-                        }
-                    )
-                    Text(
-                        text = "Supports Chinese folders, e.g. /手機快速上傳",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Section 3: Conflict Behavior
+            // Section 2: Conflict Behavior
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -302,7 +239,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 4: Network & Smart routing constraints
+            // Section 3: Network & Smart routing constraints
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -376,7 +313,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 5: Log clearance and DB actions
+            // Section 4: Log clearance and DB actions
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -418,11 +355,49 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToAbout() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = "About",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            text = "Developer and version information",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
         }
     }
-}
-
-// Helper to update text states
-private fun <T> mutableStateFlowOf(value: T): MutableState<T> {
-    return mutableStateOf(value)
 }

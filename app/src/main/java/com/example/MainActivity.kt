@@ -2,6 +2,8 @@ package com.example
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +18,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.ui.AboutScreen
 import com.example.ui.MainUploadCenterScreen
 import com.example.ui.MainViewModel
 import com.example.ui.SettingsScreen
@@ -31,6 +34,33 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         val viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        val openDocumentsLauncher = registerForActivityResult(
+            ActivityResultContracts.OpenMultipleDocuments()
+        ) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            viewModel.addSelectedFiles(uris) { result ->
+                when {
+                    result.addedCount > 0 -> {
+                        Toast.makeText(
+                            this,
+                            if (result.failedCount > 0) {
+                                "Added ${result.addedCount} file(s). ${result.failedCount} file(s) need attention."
+                            } else {
+                                "Added ${result.addedCount} file(s) to OneDrive queue."
+                            },
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    else -> {
+                        Toast.makeText(
+                            this,
+                            "No files could be added.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
 
         // Read intent extras for smart redirecting
         val shouldNavigateToSettings = intent.getBooleanExtra("NAVIGATE_TO_SETTINGS", false)
@@ -51,6 +81,9 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onNavigateToSettings = {
                                     navController.navigate("settings")
+                                },
+                                onPickFiles = {
+                                    openDocumentsLauncher.launch(arrayOf("*/*"))
                                 }
                             )
                         }
@@ -65,6 +98,16 @@ class MainActivity : ComponentActivity() {
                                             popUpTo("settings") { inclusive = true }
                                         }
                                     }
+                                },
+                                onNavigateToAbout = {
+                                    navController.navigate("about")
+                                }
+                            )
+                        }
+                        composable("about") {
+                            AboutScreen(
+                                onNavigateBack = {
+                                    navController.navigateUp()
                                 }
                             )
                         }
