@@ -13,7 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,6 +28,7 @@ import com.example.ui.MainUploadCenterScreen
 import com.example.ui.MainViewModel
 import com.example.ui.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.LocaleHelper
 
 class MainActivity : ComponentActivity() {
 
@@ -39,14 +45,22 @@ class MainActivity : ComponentActivity() {
         ) { uris ->
             if (uris.isEmpty()) return@registerForActivityResult
             viewModel.addSelectedFiles(uris) { result ->
+                val textContext = LocaleHelper.localizedContext(
+                    this,
+                    viewModel.appSettings.value.languageCode
+                )
                 when {
                     result.addedCount > 0 -> {
                         Toast.makeText(
                             this,
                             if (result.failedCount > 0) {
-                                "Added ${result.addedCount} file(s). ${result.failedCount} file(s) need attention."
+                                textContext.getString(
+                                    R.string.toast_files_added_with_failures,
+                                    result.addedCount,
+                                    result.failedCount
+                                )
                             } else {
-                                "Added ${result.addedCount} file(s) to OneDrive queue."
+                                textContext.getString(R.string.toast_files_added, result.addedCount)
                             },
                             Toast.LENGTH_LONG
                         ).show()
@@ -54,7 +68,7 @@ class MainActivity : ComponentActivity() {
                     else -> {
                         Toast.makeText(
                             this,
-                            "No files could be added.",
+                            textContext.getString(R.string.toast_no_files_added),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -66,50 +80,58 @@ class MainActivity : ComponentActivity() {
         val shouldNavigateToSettings = intent.getBooleanExtra("NAVIGATE_TO_SETTINGS", false)
 
         setContent {
-            MyApplicationTheme {
-                val navController = rememberNavController()
-                val startDestination = if (shouldNavigateToSettings) "settings" else "upload_center"
+            val settings by viewModel.appSettings.collectAsState()
+            val baseContext = LocalContext.current
+            val localizedContext = remember(settings.languageCode) {
+                LocaleHelper.localizedContext(baseContext, settings.languageCode)
+            }
 
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    NavHost(
-                        navController = navController,
-                        startDestination = startDestination,
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        composable("upload_center") {
-                            MainUploadCenterScreen(
-                                viewModel = viewModel,
-                                onNavigateToSettings = {
-                                    navController.navigate("settings")
-                                },
-                                onPickFiles = {
-                                    openDocumentsLauncher.launch(arrayOf("*/*"))
-                                }
-                            )
-                        }
-                        composable("settings") {
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                onNavigateBack = {
-                                    if (navController.previousBackStackEntry != null) {
-                                        navController.navigateUp()
-                                    } else {
-                                        navController.navigate("upload_center") {
-                                            popUpTo("settings") { inclusive = true }
-                                        }
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                MyApplicationTheme {
+                    val navController = rememberNavController()
+                    val startDestination = if (shouldNavigateToSettings) "settings" else "upload_center"
+
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        NavHost(
+                            navController = navController,
+                            startDestination = startDestination,
+                            modifier = Modifier.padding(innerPadding)
+                        ) {
+                            composable("upload_center") {
+                                MainUploadCenterScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToSettings = {
+                                        navController.navigate("settings")
+                                    },
+                                    onPickFiles = {
+                                        openDocumentsLauncher.launch(arrayOf("*/*"))
                                     }
-                                },
-                                onNavigateToAbout = {
-                                    navController.navigate("about")
-                                }
-                            )
-                        }
-                        composable("about") {
-                            AboutScreen(
-                                onNavigateBack = {
-                                    navController.navigateUp()
-                                }
-                            )
+                                )
+                            }
+                            composable("settings") {
+                                SettingsScreen(
+                                    viewModel = viewModel,
+                                    onNavigateBack = {
+                                        if (navController.previousBackStackEntry != null) {
+                                            navController.navigateUp()
+                                        } else {
+                                            navController.navigate("upload_center") {
+                                                popUpTo("settings") { inclusive = true }
+                                            }
+                                        }
+                                    },
+                                    onNavigateToAbout = {
+                                        navController.navigate("about")
+                                    }
+                                )
+                            }
+                            composable("about") {
+                                AboutScreen(
+                                    onNavigateBack = {
+                                        navController.navigateUp()
+                                    }
+                                )
+                            }
                         }
                     }
                 }

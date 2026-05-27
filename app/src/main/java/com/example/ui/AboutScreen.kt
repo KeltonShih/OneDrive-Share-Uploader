@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,12 +44,12 @@ fun AboutScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.about_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Settings"
+                            contentDescription = stringResource(R.string.back_to_settings)
                         )
                     }
                 },
@@ -88,12 +89,12 @@ fun AboutScreen(
                         modifier = Modifier.size(72.dp)
                     )
                     Text(
-                        text = "OneDrive Share Uploader",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Fast share-to-OneDrive uploads",
+                        text = stringResource(R.string.about_tagline),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -122,7 +123,7 @@ fun AboutScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "App Information",
+                            text = stringResource(R.string.app_information),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -130,9 +131,9 @@ fun AboutScreen(
 
                     HorizontalDivider()
 
-                    AboutInfoRow(label = "Developer", value = "Kelton Shih (老九)")
+                    AboutInfoRow(label = stringResource(R.string.developer), value = "Kelton Shih (老九)")
                     AboutInfoRow(
-                        label = "Version",
+                        label = stringResource(R.string.version),
                         value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
                     )
                 }

@@ -10,6 +10,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.R
 import com.example.auth.AuthState
 import com.example.auth.MsalAuthManager
 import com.example.data.local.AppDatabase
@@ -21,6 +22,7 @@ import com.example.data.model.UploadStatus
 import com.example.data.repository.UploadRepository
 import com.example.util.FileHelper
 import com.example.util.FolderResolver
+import com.example.util.LocaleHelper
 import com.example.worker.UploadWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
@@ -120,6 +122,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addSelectedFiles(uris: List<Uri>, onResult: (AddFilesResult) -> Unit) {
         viewModelScope.launch {
             val settings = dataStoreManager.appSettingsFlow.first()
+            val textContext = LocaleHelper.localizedContext(context, settings.languageCode)
             var addedCount = 0
             var failedCount = 0
 
@@ -146,7 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             progress = 0,
                             uploadedBytes = 0L,
                             totalBytes = finalSize,
-                            errorMessage = "Queued for upload.",
+                            errorMessage = textContext.getString(R.string.queued_for_upload),
                             uploadedFileName = null,
                             createdAt = now,
                             updatedAt = now,
@@ -275,6 +278,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateLanguage(languageCode: String) {
+        viewModelScope.launch {
+            dataStoreManager.updateLanguageCode(languageCode)
+        }
+    }
+
     fun openFolderPicker() {
         _folderPickerState.value = FolderPickerUiState(isOpen = true, isLoading = true)
         loadFolderChildren(itemId = null, path = "")
@@ -306,7 +315,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _folderPickerState.value.copy(
                         isLoading = false,
                         folders = emptyList(),
-                        errorMessage = error.message ?: "Could not load OneDrive folders."
+                        errorMessage = error.message
+                            ?: localizedTextContext().getString(R.string.error_load_onedrive_folders)
                     )
                 }
             )
@@ -321,7 +331,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun fetchOneDriveFolders(itemId: String?, parentPath: String): List<OneDriveFolder> {
         val token = msalAuthManager.getAccessTokenSilently()
-            ?: throw IllegalStateException("Please sign in to OneDrive before browsing folders.")
+            ?: throw IllegalStateException(
+                localizedTextContext().getString(R.string.error_signin_browse_folders)
+            )
 
         val endpoint = if (itemId == null) {
             "https://graph.microsoft.com/v1.0/me/drive/root/children"
@@ -368,6 +380,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = path.trim().trim('/')
         return if (trimmed.isBlank()) "/" else "/$trimmed"
     }
+
+    private fun localizedTextContext() =
+        LocaleHelper.localizedContext(context, appSettings.value.languageCode)
 
     private fun joinFolderPath(parentPath: String, childName: String): String {
         val cleanParent = parentPath.trim().trim('/')

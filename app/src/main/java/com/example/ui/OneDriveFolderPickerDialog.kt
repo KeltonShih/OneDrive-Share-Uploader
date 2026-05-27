@@ -36,7 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.R
 
 @Composable
 fun OneDriveFolderPickerDialog(
@@ -55,7 +57,7 @@ fun OneDriveFolderPickerDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Choose OneDrive Folder")
+                Text(stringResource(R.string.choose_onedrive_folder))
                 Text(
                     text = if (state.currentPath.isBlank()) "/" else state.currentPath,
                     style = MaterialTheme.typography.bodySmall,
@@ -73,7 +75,7 @@ fun OneDriveFolderPickerDialog(
                 OutlinedTextField(
                     value = manualFolderPath,
                     onValueChange = { manualFolderPath = it },
-                    label = { Text("Manual folder path") },
+                    label = { Text(stringResource(R.string.manual_folder_path)) },
                     placeholder = { Text("/Upload") },
                     leadingIcon = {
                         Icon(Icons.Default.DriveFileMove, contentDescription = null)
@@ -86,7 +88,7 @@ fun OneDriveFolderPickerDialog(
                     onClick = { onUseManualFolder(manualFolderPath) },
                     enabled = manualFolderPath.isNotBlank()
                 ) {
-                    Text("Use Typed Path")
+                    Text(stringResource(R.string.use_typed_path))
                 }
 
                 HorizontalDivider()
@@ -95,12 +97,12 @@ fun OneDriveFolderPickerDialog(
                     OutlinedButton(onClick = onRoot, enabled = !state.isLoading) {
                         Icon(Icons.Default.Home, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Root")
+                        Text(stringResource(R.string.root))
                     }
                     OutlinedButton(onClick = onRefresh, enabled = !state.isLoading) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Refresh")
+                        Text(stringResource(R.string.refresh))
                     }
                 }
 
@@ -124,7 +126,7 @@ fun OneDriveFolderPickerDialog(
                     }
                     state.folders.isEmpty() -> {
                         Text(
-                            text = "No subfolders here. You can still use this folder.",
+                            text = stringResource(R.string.no_subfolders),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -160,13 +162,13 @@ fun OneDriveFolderPickerDialog(
                 onClick = onUseCurrentFolder,
                 enabled = !state.isLoading
             ) {
-                Text("Use This Folder")
+                Text(stringResource(R.string.use_this_folder))
             }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         }

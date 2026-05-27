@@ -21,6 +21,7 @@ class DataStoreManager(private val context: Context) {
         val CONFLICT_BEHAVIOR_KEY = stringPreferencesKey("conflict_behavior")
         val WIFI_ONLY_KEY = booleanPreferencesKey("wifi_only")
         val RULES_ENABLED_KEY = booleanPreferencesKey("rules_enabled")
+        val LANGUAGE_CODE_KEY = stringPreferencesKey("language_code")
     }
 
     val appSettingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
@@ -32,7 +33,8 @@ class DataStoreManager(private val context: Context) {
                 ConflictBehavior.RENAME
             },
             wifiOnly = preferences[WIFI_ONLY_KEY] ?: false,
-            rulesEnabled = preferences[RULES_ENABLED_KEY] ?: false
+            rulesEnabled = preferences[RULES_ENABLED_KEY] ?: false,
+            languageCode = preferences[LANGUAGE_CODE_KEY] ?: AppSettings().languageCode
         )
     }
 
@@ -57,6 +59,12 @@ class DataStoreManager(private val context: Context) {
     suspend fun updateRulesEnabled(rulesEnabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[RULES_ENABLED_KEY] = rulesEnabled
+        }
+    }
+
+    suspend fun updateLanguageCode(languageCode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[LANGUAGE_CODE_KEY] = languageCode
         }
     }
 }

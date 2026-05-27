@@ -9,18 +9,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.lifecycle.ViewModelProvider
 import com.example.ui.MainViewModel
-import com.example.worker.UploadWorker
+import com.example.util.LocaleHelper
 
 class ShareUploadActivity : ComponentActivity() {
 
@@ -30,40 +30,49 @@ class ShareUploadActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setContent {
-            MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+            val settings by viewModel.appSettings.collectAsState()
+            val baseContext = LocalContext.current
+            val localizedContext = remember(settings.languageCode) {
+                LocaleHelper.localizedContext(baseContext, settings.languageCode)
+            }
+
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                MaterialTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
                     ) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Adding shared file(s) to OneDrive queue...",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            "Copying to local private storage...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                stringResource(R.string.share_adding_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                stringResource(R.string.share_adding_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                 }
             }
         }
 
-        handleShareIntent()
+        handleShareIntent(viewModel)
     }
 
-    private fun handleShareIntent() {
+    private fun handleShareIntent(viewModel: MainViewModel) {
         val action = intent.action
 
         val uris = linkedSetOf<Uri>()
@@ -86,26 +95,36 @@ class ShareUploadActivity : ComponentActivity() {
         }
 
         if (uris.isEmpty()) {
-            Toast.makeText(this, "No shareable file URI found in intent.", Toast.LENGTH_SHORT).show()
+            val textContext = localizedTextContext(viewModel)
+            val messageRes = if (hasNonFileShareContent()) {
+                R.string.toast_unsupported_share_content
+            } else {
+                R.string.toast_no_share_uri
+            }
+            Toast.makeText(this, textContext.getString(messageRes), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
-        processAndQueueSharedUris(uris.toList())
+        processAndQueueSharedUris(viewModel, uris.toList())
     }
 
-    private fun processAndQueueSharedUris(uris: List<Uri>) {
-        val viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+    private fun processAndQueueSharedUris(viewModel: MainViewModel, uris: List<Uri>) {
         viewModel.addSelectedFiles(uris) { result ->
+            val textContext = localizedTextContext(viewModel)
             try {
                 when {
                     result.addedCount > 0 -> {
                         Toast.makeText(
                             this@ShareUploadActivity,
                             if (result.failedCount > 0) {
-                                "Added ${result.addedCount} file(s). ${result.failedCount} file(s) need attention."
+                                textContext.getString(
+                                    R.string.toast_files_added_with_failures,
+                                    result.addedCount,
+                                    result.failedCount
+                                )
                             } else {
-                                "Added ${result.addedCount} file(s) to OneDrive queue!"
+                                textContext.getString(R.string.toast_files_added, result.addedCount)
                             },
                             Toast.LENGTH_LONG
                         ).show()
@@ -113,7 +132,7 @@ class ShareUploadActivity : ComponentActivity() {
                     else -> {
                         Toast.makeText(
                             this@ShareUploadActivity,
-                            "Failed to process shared files.",
+                            textContext.getString(R.string.toast_process_shared_failed),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -122,12 +141,23 @@ class ShareUploadActivity : ComponentActivity() {
                 Log.e(TAG, "Unexpected share processing failure", e)
                 Toast.makeText(
                     this@ShareUploadActivity,
-                    "Share failed: ${e.message ?: "Unknown error"}",
+                    textContext.getString(R.string.toast_share_failed, e.message ?: "Unknown error"),
                     Toast.LENGTH_LONG
                 ).show()
             } finally {
                 finish()
             }
         }
+    }
+
+    private fun localizedTextContext(viewModel: MainViewModel) =
+        LocaleHelper.localizedContext(this, viewModel.appSettings.value.languageCode)
+
+    private fun hasNonFileShareContent(): Boolean {
+        val type = intent.type.orEmpty()
+        return type.startsWith("text/") ||
+            intent.hasExtra(Intent.EXTRA_TEXT) ||
+            intent.hasExtra(Intent.EXTRA_HTML_TEXT) ||
+            intent.hasExtra(Intent.EXTRA_SUBJECT)
     }
 }

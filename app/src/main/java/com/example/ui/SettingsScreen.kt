@@ -16,9 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.auth.AuthState
+import com.example.data.model.AppLanguage
 import com.example.data.model.ConflictBehavior
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,11 +34,13 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings by viewModel.appSettings.collectAsState()
     val authState by viewModel.authState.collectAsState()
+    val selectedLanguage = AppLanguage.fromCode(settings.languageCode)
+    var showLanguageDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.settings_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -43,7 +48,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Upload Center"
+                            contentDescription = stringResource(R.string.back_to_upload_center)
                         )
                     }
                 },
@@ -63,7 +68,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section 1: Microsoft Authentication Status
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -82,11 +86,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudQueue,
-                            contentDescription = "OneDrive Cloud",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "OneDrive Login Status",
+                            text = stringResource(R.string.onedrive_login_status),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -99,7 +103,7 @@ fun SettingsScreen(
                         }
                         is AuthState.SignedOut -> {
                             Text(
-                                "Not signed in to Microsoft account.",
+                                stringResource(R.string.not_signed_in),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -117,13 +121,13 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(Icons.Default.Login, contentDescription = null)
-                                    Text("Sign In with Microsoft")
+                                    Text(stringResource(R.string.sign_in_with_microsoft))
                                 }
                             }
                         }
                         is AuthState.SignedIn -> {
                             Text(
-                                "Signed in as:",
+                                stringResource(R.string.signed_in_as),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.secondary
                             )
@@ -148,13 +152,16 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(Icons.Default.Logout, contentDescription = null)
-                                    Text("Sign Out")
+                                    Text(stringResource(R.string.sign_out))
                                 }
                             }
                         }
                         is AuthState.Error -> {
                             Text(
-                                text = "Authentication Error:\n${auth.exception.message}",
+                                text = stringResource(
+                                    R.string.auth_error,
+                                    auth.exception.message.orEmpty()
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -165,14 +172,56 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Try Sign In Again")
+                                Text(stringResource(R.string.try_sign_in_again))
                             }
                         }
                     }
                 }
             }
 
-            // Section 2: Conflict Behavior
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showLanguageDialog = true },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = stringResource(R.string.language_title),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            text = languageLabel(selectedLanguage),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -191,11 +240,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
-                            contentDescription = "Conflict behavior option",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Conflict Resolution Behaviour",
+                            text = stringResource(R.string.conflict_resolution),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -218,17 +267,17 @@ fun SettingsScreen(
                             Column {
                                 Text(
                                     text = when (behavior) {
-                                        ConflictBehavior.RENAME -> "Rename Automatically (RENAME)"
-                                        ConflictBehavior.REPLACE -> "Overwrite/Replace existing (REPLACE)"
-                                        ConflictBehavior.FAIL -> "Mark task as Failed (FAIL)"
+                                        ConflictBehavior.RENAME -> stringResource(R.string.conflict_rename_title)
+                                        ConflictBehavior.REPLACE -> stringResource(R.string.conflict_replace_title)
+                                        ConflictBehavior.FAIL -> stringResource(R.string.conflict_fail_title)
                                     },
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
                                     text = when (behavior) {
-                                        ConflictBehavior.RENAME -> "Renames target to prevent overwrites (default)"
-                                        ConflictBehavior.REPLACE -> "Overwrites target destination file instantly"
-                                        ConflictBehavior.FAIL -> "Fails the job without altering existing files"
+                                        ConflictBehavior.RENAME -> stringResource(R.string.conflict_rename_desc)
+                                        ConflictBehavior.REPLACE -> stringResource(R.string.conflict_replace_desc)
+                                        ConflictBehavior.FAIL -> stringResource(R.string.conflict_fail_desc)
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -239,7 +288,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 3: Network & Smart routing constraints
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -258,11 +306,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.SettingsInputAntenna,
-                            contentDescription = "Network Constraints",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Constraints & Advanced Routing",
+                            text = stringResource(R.string.network_constraints),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -275,9 +323,9 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Only Upload on Wi-Fi", style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.wifi_only), style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Suspends the upload queue if connected to mobile/metered connections",
+                                stringResource(R.string.wifi_only_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -297,9 +345,9 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Enable Smart Folder Routing", style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.smart_routing), style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Auto routes image/*, video/*, PDFs, and Excel sheets to categorized subfolders (Priority 5 placeholder)",
+                                stringResource(R.string.smart_routing_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -313,7 +361,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 4: Log clearance and DB actions
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -327,12 +374,12 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "History Clean Actions",
+                        text = stringResource(R.string.history_clean_actions),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.error
                     )
                     Text(
-                        text = "This removes all past items that successfully finished or were canceled from the local Room tracking database.",
+                        text = stringResource(R.string.history_clean_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -350,7 +397,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.DeleteForever, contentDescription = null)
-                            Text("Clear Completed History Logs")
+                            Text(stringResource(R.string.clear_completed_history))
                         }
                     }
                 }
@@ -369,14 +416,14 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = {
                         Text(
-                            text = "About",
+                            text = stringResource(R.string.about_title),
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold
                         )
                     },
                     supportingContent = {
                         Text(
-                            text = "Developer and version information",
+                            text = stringResource(R.string.about_subtitle),
                             style = MaterialTheme.typography.bodySmall
                         )
                     },
@@ -399,5 +446,57 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(stringResource(R.string.language_dialog_title)) },
+            text = {
+                Column {
+                    AppLanguage.entries.forEach { language ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateLanguage(language.code)
+                                    showLanguageDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedLanguage == language,
+                                onClick = {
+                                    viewModel.updateLanguage(language.code)
+                                    showLanguageDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(languageLabel(language))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun languageLabel(language: AppLanguage): String {
+    return when (language) {
+        AppLanguage.SYSTEM -> stringResource(R.string.language_system)
+        AppLanguage.ZH_TW -> stringResource(R.string.language_zh_tw)
+        AppLanguage.ZH_CN -> stringResource(R.string.language_zh_cn)
+        AppLanguage.EN -> stringResource(R.string.language_en)
+        AppLanguage.JA -> stringResource(R.string.language_ja)
+        AppLanguage.KO -> stringResource(R.string.language_ko)
+        AppLanguage.ES -> stringResource(R.string.language_es)
     }
 }

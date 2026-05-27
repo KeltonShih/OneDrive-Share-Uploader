@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +62,7 @@ fun MainUploadCenterScreen(
                                 .padding(end = 12.dp)
                         )
                         Text(
-                            text = "OneDrive Share Uploader",
+                            text = stringResource(R.string.main_title),
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp
                         )
@@ -74,7 +75,7 @@ fun MainUploadCenterScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Preferences and Settings"
+                            contentDescription = stringResource(R.string.settings_title)
                         )
                     }
                 },
@@ -88,7 +89,7 @@ fun MainUploadCenterScreen(
         bottomBar = {
             val emailText = when (val auth = authState) {
                 is AuthState.SignedIn -> auth.account.username
-                else -> "Not logged in"
+                else -> stringResource(R.string.not_logged_in)
             }
             val statusColor = when (authState) {
                 is AuthState.SignedIn -> Color(0xFF48BB78) // Green
@@ -96,9 +97,9 @@ fun MainUploadCenterScreen(
                 else -> Color(0xFFDD6B20) // Orange
             }
             val statusText = when (authState) {
-                is AuthState.SignedIn -> "OneDrive Connected"
-                is AuthState.SignedOut -> "Disconnected"
-                else -> "Initializing..."
+                is AuthState.SignedIn -> stringResource(R.string.onedrive_connected)
+                is AuthState.SignedOut -> stringResource(R.string.disconnected)
+                else -> stringResource(R.string.initializing)
             }
             Surface(
                 modifier = Modifier
@@ -163,18 +164,18 @@ fun MainUploadCenterScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ReportProblem,
-                            contentDescription = "Not signed in warning",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Microsoft Account Sign-In Required",
+                                stringResource(R.string.signin_required),
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
-                                "Sharing uploads will stay paused until account log-in is complete.",
+                                stringResource(R.string.signin_required_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -185,7 +186,7 @@ fun MainUploadCenterScreen(
                                 contentColor = MaterialTheme.colorScheme.onErrorContainer
                             )
                         ) {
-                            Text("SIGN IN", fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.sign_in_short), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -224,7 +225,7 @@ fun MainUploadCenterScreen(
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Current Upload Folder",
+                                    text = stringResource(R.string.current_upload_folder),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -244,7 +245,7 @@ fun MainUploadCenterScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.FolderOpen,
-                                    contentDescription = "Choose upload folder"
+                                    contentDescription = stringResource(R.string.choose_upload_folder)
                                 )
                             }
                         }
@@ -258,7 +259,7 @@ fun MainUploadCenterScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Upload Queue",
+                            text = stringResource(R.string.upload_queue),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
@@ -275,7 +276,7 @@ fun MainUploadCenterScreen(
                                 ) {
                                     Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Clear Done", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.clear_done), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                             FilledTonalButton(
@@ -289,7 +290,7 @@ fun MainUploadCenterScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.upload), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                             if (uploadTasks.isNotEmpty()) {
                                 Box(
@@ -298,7 +299,11 @@ fun MainUploadCenterScreen(
                                         .padding(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = "${uploadTasks.size} " + if (uploadTasks.size == 1) "Item" else "Items",
+                                        text = if (uploadTasks.size == 1) {
+                                            stringResource(R.string.item_count_one, uploadTasks.size)
+                                        } else {
+                                            stringResource(R.string.item_count_many, uploadTasks.size)
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -312,8 +317,8 @@ fun MainUploadCenterScreen(
                 if (uploadTasks.isEmpty()) {
                     item {
                         EmptyStatePlaceholder(
-                            title = "No Upload Tasks",
-                            description = "Files shared to this app will stay here while queued, uploading, completed, canceled, or failed.",
+                            title = stringResource(R.string.no_upload_tasks),
+                            description = stringResource(R.string.no_upload_tasks_desc),
                             icon = Icons.Default.DriveFolderUpload
                         )
                     }
@@ -410,7 +415,7 @@ fun UploadTaskCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Folder: ${job.targetFolder}",
+                        text = stringResource(R.string.folder_label, job.targetFolder),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -418,9 +423,15 @@ fun UploadTaskCard(
                     )
                     Text(
                         text = when {
-                            isFailed -> "Error: ${job.errorMessage ?: "Upload operation failed."}"
-                            job.status == UploadStatus.SUCCESS -> "Completed ${formatDateTime(job.completedAt)}"
-                            job.status == UploadStatus.CANCELED -> job.errorMessage ?: "Canceled"
+                            isFailed -> stringResource(
+                                R.string.error_label,
+                                job.errorMessage ?: stringResource(R.string.upload_failed_default)
+                            )
+                            job.status == UploadStatus.SUCCESS -> stringResource(
+                                R.string.completed_at,
+                                formatDateTime(job.completedAt)
+                            )
+                            job.status == UploadStatus.CANCELED -> job.errorMessage ?: stringResource(R.string.canceled)
                             !job.errorMessage.isNullOrBlank() -> job.errorMessage
                             else -> statusLabel(job.status)
                         },
@@ -441,7 +452,7 @@ fun UploadTaskCard(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Renamed: $savedAsName",
+                                text = stringResource(R.string.renamed_label, savedAsName),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF8A5200),
@@ -464,7 +475,7 @@ fun UploadTaskCard(
                             ) {
                                 Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Cancel", fontSize = 12.sp)
+                                Text(stringResource(R.string.cancel), fontSize = 12.sp)
                             }
                         }
                         isFailed && job.localCachePath.isNotBlank() -> {
@@ -478,7 +489,7 @@ fun UploadTaskCard(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("RETRY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.retry), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         isFinished || isFailed -> {
@@ -489,7 +500,7 @@ fun UploadTaskCard(
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Clear", fontSize = 12.sp)
+                                Text(stringResource(R.string.clear), fontSize = 12.sp)
                             }
                         }
                     }
@@ -543,9 +554,9 @@ fun HistoryJobRow(
     
     val formattedSize = formatBytes(job.fileSize).let { "${it.first} ${it.second}" }
     val metaText = if (isSuccess) {
-        "Completed • ${formatDateTime(job.completedAt)} • $formattedSize"
+        "${stringResource(R.string.completed)} • ${formatDateTime(job.completedAt)} • $formattedSize"
     } else {
-        "${job.errorMessage ?: "Cancelled/Failed"} • ${formatDateTime(job.completedAt)}"
+        "${job.errorMessage ?: stringResource(R.string.failed)} • ${formatDateTime(job.completedAt)}"
     }
 
     Card(
@@ -621,7 +632,7 @@ fun StatusBadge(status: UploadStatus) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = status.name,
+            text = statusLabel(status),
             color = colorPair.second,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold
@@ -682,6 +693,7 @@ fun formatMemorySize(uploadedBytes: Long, fileSize: Long): String {
     return "$up $upUnit / $tot $totUnit"
 }
 
+@Composable
 fun formatTaskSizeText(job: UploadJobEntity): String {
     val (total, totalUnit) = formatBytes(job.fileSize)
     val totalText = "$total $totalUnit"
@@ -690,15 +702,15 @@ fun formatTaskSizeText(job: UploadJobEntity): String {
         job.status == UploadStatus.FAILED
 
     if (isDone) {
-        return "Size $totalText"
+        return stringResource(R.string.size_label, totalText)
     }
 
     if (job.errorMessage?.contains("Finalizing", ignoreCase = true) == true) {
-        return "Sent $totalText, finalizing..."
+        return stringResource(R.string.sent_finalizing, totalText)
     }
 
     val (uploaded, uploadedUnit) = formatBytes(job.uploadedBytes)
-    return "Uploaded $uploaded $uploadedUnit of $totalText"
+    return stringResource(R.string.uploaded_of, "$uploaded $uploadedUnit", totalText)
 }
 
 fun formatBytes(bytes: Long): Pair<String, String> {
@@ -715,13 +727,14 @@ fun formatDateTime(timestamp: Long?): String {
     return df.format(Date(timestamp))
 }
 
+@Composable
 fun statusLabel(status: UploadStatus): String {
     return when (status) {
-        UploadStatus.COPYING -> "Copying"
-        UploadStatus.QUEUED -> "Queued"
-        UploadStatus.UPLOADING -> "Uploading"
-        UploadStatus.SUCCESS -> "Completed"
-        UploadStatus.FAILED -> "Failed"
-        UploadStatus.CANCELED -> "Canceled"
+        UploadStatus.COPYING -> stringResource(R.string.copying)
+        UploadStatus.QUEUED -> stringResource(R.string.queued)
+        UploadStatus.UPLOADING -> stringResource(R.string.uploading)
+        UploadStatus.SUCCESS -> stringResource(R.string.completed)
+        UploadStatus.FAILED -> stringResource(R.string.failed)
+        UploadStatus.CANCELED -> stringResource(R.string.canceled)
     }
 }
