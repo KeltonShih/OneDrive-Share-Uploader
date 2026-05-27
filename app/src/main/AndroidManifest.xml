@@ -91,11 +91,11 @@
                 <data
                     android:scheme="msauth"
                     android:host="com.keltonshih.onedriveshareuploader"
-                    android:path="/8mqhsIKBrD0XppDpZsZCTEOan+8=" />
+                    android:path="/8mqhslKBrD0XppDpZsZCTEOan+8=" />
                 <data
                     android:scheme="msauth"
                     android:host="com.keltonshih.onedriveshareuploader"
-                    android:path="/8mqhsIKBrD0XppDpZsZCTEOan%2B8%3D" />
+                    android:path="/8mqhslKBrD0XppDpZsZCTEOan%2B8%3D" />
             </intent-filter>
         </activity>
 
