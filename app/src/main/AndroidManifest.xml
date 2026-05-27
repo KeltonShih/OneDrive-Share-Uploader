@@ -88,6 +88,14 @@
                     android:scheme="msauth"
                     android:host="com.keltonshih.onedriveshareuploader"
                     android:path="/yDRtUMXdQVe3Lt8eXOC8TRTFPH0%3D" />
+                <data
+                    android:scheme="msauth"
+                    android:host="com.keltonshih.onedriveshareuploader"
+                    android:path="/8mqhsIKBrD0XppDpZsZCTEOan+8=" />
+                <data
+                    android:scheme="msauth"
+                    android:host="com.keltonshih.onedriveshareuploader"
+                    android:path="/8mqhsIKBrD0XppDpZsZCTEOan%2B8%3D" />
             </intent-filter>
         </activity>
 
