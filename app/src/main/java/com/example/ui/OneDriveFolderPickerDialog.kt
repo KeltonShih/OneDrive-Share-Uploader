@@ -14,7 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
@@ -43,27 +43,20 @@ import com.example.R
 @Composable
 fun OneDriveFolderPickerDialog(
     state: FolderPickerUiState,
-    manualPath: String,
     onDismiss: () -> Unit,
     onOpenFolder: (OneDriveFolder) -> Unit,
     onUseCurrentFolder: () -> Unit,
-    onUseManualFolder: (String) -> Unit,
+    onCreateFolder: (String) -> Unit,
     onRefresh: () -> Unit,
     onRoot: () -> Unit
 ) {
-    var manualFolderPath by remember(manualPath) { mutableStateOf(manualPath) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.choose_onedrive_folder))
-                Text(
-                    text = if (state.currentPath.isBlank()) "/" else state.currentPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            Text(stringResource(R.string.choose_onedrive_folder))
         },
         text = {
             Column(
@@ -72,23 +65,17 @@ fun OneDriveFolderPickerDialog(
                     .heightIn(min = 180.dp, max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = manualFolderPath,
-                    onValueChange = { manualFolderPath = it },
-                    label = { Text(stringResource(R.string.manual_folder_path)) },
-                    placeholder = { Text("/Upload") },
-                    leadingIcon = {
-                        Icon(Icons.Default.DriveFileMove, contentDescription = null)
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedButton(
-                    onClick = { onUseManualFolder(manualFolderPath) },
-                    enabled = manualFolderPath.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.use_typed_path))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = stringResource(R.string.current_folder_path),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (state.currentPath.isBlank()) "/" else state.currentPath,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 HorizontalDivider()
@@ -103,6 +90,17 @@ fun OneDriveFolderPickerDialog(
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(stringResource(R.string.refresh))
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            newFolderName = ""
+                            showCreateFolderDialog = true
+                        },
+                        enabled = !state.isLoading
+                    ) {
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.new_folder))
                     }
                 }
 
@@ -173,4 +171,37 @@ fun OneDriveFolderPickerDialog(
             }
         }
     )
+
+    if (showCreateFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateFolderDialog = false },
+            title = { Text(stringResource(R.string.new_folder)) },
+            text = {
+                OutlinedTextField(
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    label = { Text(stringResource(R.string.new_folder_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val name = newFolderName.trim()
+                        showCreateFolderDialog = false
+                        onCreateFolder(name)
+                    },
+                    enabled = newFolderName.trim().isNotBlank()
+                ) {
+                    Text(stringResource(R.string.create))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateFolderDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 }

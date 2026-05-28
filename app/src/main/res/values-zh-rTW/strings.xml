@@ -5,10 +5,13 @@
     <string name="toast_no_files_added">沒有檔案可以加入。</string>
     <string name="toast_no_share_uri">找不到可分享的檔案 URI。</string>
     <string name="toast_unsupported_share_content">目前只支援分享檔案，文字和連結還不能上傳。</string>
+    <string name="toast_no_upload_destinations">請先到設定新增上傳目的地。</string>
     <string name="toast_process_shared_failed">處理分享檔案失敗。</string>
     <string name="toast_share_failed">分享失敗：%1$s</string>
     <string name="share_adding_title">正在加入分享檔案到 OneDrive 隊列...</string>
     <string name="share_adding_subtitle">正在複製到本機私人儲存空間...</string>
+    <string name="share_choose_destination_title">選擇上傳目的地</string>
+    <string name="share_choose_destination_subtitle">檔案會加入隊列，然後回到原本的 app。</string>
     <string name="settings_title">設定</string>
     <string name="back_to_upload_center">返回上傳中心</string>
     <string name="onedrive_login_status">OneDrive 登入狀態</string>
@@ -46,6 +49,17 @@
     <string name="language_ko">한국어</string>
     <string name="language_es">Español</string>
     <string name="cancel">取消</string>
+    <string name="save">儲存</string>
+    <string name="edit">編輯</string>
+    <string name="delete">刪除</string>
+    <string name="upload_destinations">上傳目的地</string>
+    <string name="upload_destinations_desc">建立具名上傳目的地。分享或開啟檔案時先選擇 App，再於對話框中選擇目的地。</string>
+    <string name="add_destination">新增目的地</string>
+    <string name="edit_destination">編輯目的地</string>
+    <string name="destination_name">目的地名稱</string>
+    <string name="destination_account_label">OneDrive：%1$s</string>
+    <string name="destination_account_future_note">此目的地目前使用已登入的 OneDrive 帳號。未來加入多帳號支援後可選擇帳號。</string>
+    <string name="no_folder_selected">尚未選擇資料夾</string>
     <string name="about_tagline">快速分享檔案到 OneDrive</string>
     <string name="app_information">App 資訊</string>
     <string name="developer">開發者</string>
@@ -69,6 +83,7 @@
     <string name="no_upload_tasks">沒有上傳任務</string>
     <string name="no_upload_tasks_desc">分享到此 app 的檔案會在這裡保留為排隊、上傳中、完成、取消或失敗。</string>
     <string name="folder_label">資料夾：%1$s</string>
+    <string name="destination_folder_label">%1$s · %2$s</string>
     <string name="error_label">錯誤：%1$s</string>
     <string name="upload_failed_default">上傳操作失敗。</string>
     <string name="completed_at">完成於 %1$s</string>
@@ -88,6 +103,7 @@
     <string name="upload_stage_initializing">正在初始化上傳...</string>
     <string name="upload_stage_get_token">正在取得 Microsoft 存取權杖...</string>
     <string name="upload_stage_checking_cache">正在檢查本機暫存檔...</string>
+    <string name="upload_stage_preparing_folder">正在準備目的地資料夾...</string>
     <string name="upload_stage_graph">正在上傳到 Microsoft Graph...</string>
     <string name="upload_stage_large_session">正在建立大型檔案上傳工作階段...</string>
     <string name="upload_stage_small_progress">正在上傳小型檔案... %1$d%%</string>
@@ -114,11 +130,15 @@
     <string name="queued_for_upload">已加入上傳隊列。</string>
     <string name="error_load_onedrive_folders">無法載入 OneDrive 資料夾。</string>
     <string name="error_signin_browse_folders">瀏覽資料夾前，請先登入 OneDrive。</string>
+    <string name="error_folder_name_invalid">資料夾名稱不可空白，也不可包含 \\ / : * ? &quot; &lt; &gt; |</string>
+    <string name="error_create_onedrive_folder">無法建立 OneDrive 資料夾。</string>
     <string name="choose_onedrive_folder">選擇 OneDrive 資料夾</string>
-    <string name="manual_folder_path">手動輸入資料夾路徑</string>
-    <string name="use_typed_path">使用輸入路徑</string>
+    <string name="current_folder_path">目前路徑</string>
     <string name="root">根目錄</string>
     <string name="refresh">重新整理</string>
-    <string name="no_subfolders">這裡沒有子資料夾。你仍然可以使用此資料夾。</string>
+    <string name="new_folder">新增資料夾</string>
+    <string name="new_folder_name">資料夾名稱</string>
+    <string name="create">建立</string>
+    <string name="no_subfolders">這裡沒有子資料夾。</string>
     <string name="use_this_folder">使用此資料夾</string>
 </resources>

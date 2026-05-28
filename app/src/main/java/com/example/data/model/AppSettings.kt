@@ -5,5 +5,16 @@ data class AppSettings(
     val conflictBehavior: ConflictBehavior = ConflictBehavior.RENAME,
     val wifiOnly: Boolean = false,
     val rulesEnabled: Boolean = false,
-    val languageCode: String = AppLanguage.SYSTEM.code
-)
+    val languageCode: String = AppLanguage.SYSTEM.code,
+    val uploadDestinations: List<UploadDestination> = listOf(UploadDestination.default(defaultFolder))
+) {
+    val enabledDestinations: List<UploadDestination>
+        get() = uploadDestinations
+            .filter { it.isEnabled }
+            .sortedBy { it.sortOrder }
+
+    val defaultDestination: UploadDestination
+        get() = enabledDestinations.firstOrNull()
+            ?: uploadDestinations.sortedBy { it.sortOrder }.firstOrNull()
+            ?: UploadDestination.default(defaultFolder)
+}

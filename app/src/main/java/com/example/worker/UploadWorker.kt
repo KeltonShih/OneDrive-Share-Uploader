@@ -155,6 +155,8 @@ class UploadWorker(
 
         // 3. Resolve destination URL path
         val cleanFolder = uploadingJob.targetFolder.trim('/')
+        updateJobStage(uploadingJob, t(R.string.upload_stage_preparing_folder))
+        ensureFolderPathExists(token, cleanFolder)
         val encodedPath = buildEncodedPath(cleanFolder, uploadingJob.sanitizedFileName)
 
         // Decide Upload API: Small PUT (<= 250MB) vs chunked Session (> 250MB)
@@ -343,6 +345,47 @@ class UploadWorker(
             FileHelper.encodeGraphPathSegment(fileName)
         } else {
             "${FileHelper.encodeGraphFolderPath(cleanFolder)}/${FileHelper.encodeGraphPathSegment(fileName)}"
+        }
+    }
+
+    private suspend fun ensureFolderPathExists(token: String, cleanFolder: String) {
+        val segments = cleanFolder
+            .split("/")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        if (segments.isEmpty()) return
+
+        var parentPath = ""
+        for (segment in segments) {
+            val url = if (parentPath.isBlank()) {
+                "https://graph.microsoft.com/v1.0/me/drive/root/children"
+            } else {
+                "https://graph.microsoft.com/v1.0/me/drive/root:/${FileHelper.encodeGraphFolderPath(parentPath)}:/children"
+            }
+            val bodyJson = JSONObject().apply {
+                put("name", segment)
+                put("folder", JSONObject())
+                put("@microsoft.graph.conflictBehavior", "fail")
+            }
+            val request = Request.Builder()
+                .url(url)
+                .post(bodyJson.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            executeRequest(request).use { response ->
+                if (!response.isSuccessful && response.code != 409) {
+                    val errorBody = response.body?.string() ?: ""
+                    throw IllegalStateException(parseErrorMessage(response, errorBody))
+                }
+            }
+
+            parentPath = if (parentPath.isBlank()) {
+                segment
+            } else {
+                "$parentPath/$segment"
+            }
         }
     }
 

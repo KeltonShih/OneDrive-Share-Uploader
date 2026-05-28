@@ -5,10 +5,13 @@
     <string name="toast_no_files_added">No se pudo agregar ningún archivo.</string>
     <string name="toast_no_share_uri">No se encontró un URI de archivo compartible.</string>
     <string name="toast_unsupported_share_content">Esta app solo admite compartir archivos. El texto y los enlaces aún no se pueden subir.</string>
+    <string name="toast_no_upload_destinations">Agrega primero un destino de carga en Configuración.</string>
     <string name="toast_process_shared_failed">No se pudieron procesar los archivos compartidos.</string>
     <string name="toast_share_failed">Error al compartir: %1$s</string>
     <string name="share_adding_title">Agregando archivo(s) compartidos a la cola de OneDrive...</string>
     <string name="share_adding_subtitle">Copiando al almacenamiento privado local...</string>
+    <string name="share_choose_destination_title">Elegir destino de carga</string>
+    <string name="share_choose_destination_subtitle">El archivo se agregará a la cola y volverás a la app anterior.</string>
     <string name="settings_title">Configuración</string>
     <string name="back_to_upload_center">Volver al centro de cargas</string>
     <string name="onedrive_login_status">Estado de inicio de sesión de OneDrive</string>
@@ -46,6 +49,17 @@
     <string name="language_ko">한국어</string>
     <string name="language_es">Español</string>
     <string name="cancel">Cancelar</string>
+    <string name="save">Guardar</string>
+    <string name="edit">Editar</string>
+    <string name="delete">Eliminar</string>
+    <string name="upload_destinations">Destinos de carga</string>
+    <string name="upload_destinations_desc">Crea destinos de carga con nombre. Al compartir o abrir un archivo, elige primero la app y luego selecciona el destino en el diálogo.</string>
+    <string name="add_destination">Agregar destino</string>
+    <string name="edit_destination">Editar destino</string>
+    <string name="destination_name">Nombre del destino</string>
+    <string name="destination_account_label">OneDrive: %1$s</string>
+    <string name="destination_account_future_note">Este destino usa actualmente la cuenta OneDrive con sesión iniciada. La selección de cuenta estará disponible cuando se agregue soporte multicuenta.</string>
+    <string name="no_folder_selected">Aún no se seleccionó ninguna carpeta</string>
     <string name="about_tagline">Sube archivos compartidos rápidamente a OneDrive</string>
     <string name="app_information">Información de la app</string>
     <string name="developer">Desarrollador</string>
@@ -69,6 +83,7 @@
     <string name="no_upload_tasks">No hay tareas de carga</string>
     <string name="no_upload_tasks_desc">Los archivos compartidos con esta app aparecerán aquí como en cola, subiendo, completados, cancelados o fallidos.</string>
     <string name="folder_label">Carpeta: %1$s</string>
+    <string name="destination_folder_label">%1$s · %2$s</string>
     <string name="error_label">Error: %1$s</string>
     <string name="upload_failed_default">La operación de carga falló.</string>
     <string name="completed_at">Completado %1$s</string>
@@ -88,6 +103,7 @@
     <string name="upload_stage_initializing">Inicializando carga...</string>
     <string name="upload_stage_get_token">Obteniendo token de acceso de Microsoft...</string>
     <string name="upload_stage_checking_cache">Comprobando archivo en caché local...</string>
+    <string name="upload_stage_preparing_folder">Preparando carpeta de destino...</string>
     <string name="upload_stage_graph">Subiendo a Microsoft Graph...</string>
     <string name="upload_stage_large_session">Creando sesión de carga para archivo grande...</string>
     <string name="upload_stage_small_progress">Subiendo archivo pequeño... %1$d%%</string>
@@ -114,11 +130,15 @@
     <string name="queued_for_upload">Agregado a la cola de carga.</string>
     <string name="error_load_onedrive_folders">No se pudieron cargar las carpetas de OneDrive.</string>
     <string name="error_signin_browse_folders">Inicia sesión en OneDrive antes de explorar carpetas.</string>
+    <string name="error_folder_name_invalid">El nombre de la carpeta no puede estar vacío ni contener \\ / : * ? &quot; &lt; &gt; |</string>
+    <string name="error_create_onedrive_folder">No se pudo crear la carpeta de OneDrive.</string>
     <string name="choose_onedrive_folder">Elegir carpeta de OneDrive</string>
-    <string name="manual_folder_path">Ruta de carpeta manual</string>
-    <string name="use_typed_path">Usar ruta escrita</string>
+    <string name="current_folder_path">Ruta actual</string>
     <string name="root">Raíz</string>
     <string name="refresh">Actualizar</string>
-    <string name="no_subfolders">No hay subcarpetas aquí. Aun así puedes usar esta carpeta.</string>
+    <string name="new_folder">Nueva carpeta</string>
+    <string name="new_folder_name">Nombre de carpeta</string>
+    <string name="create">Crear</string>
+    <string name="no_subfolders">No hay subcarpetas aquí.</string>
     <string name="use_this_folder">Usar esta carpeta</string>
 </resources>

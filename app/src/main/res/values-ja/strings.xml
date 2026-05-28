@@ -5,10 +5,13 @@
     <string name="toast_no_files_added">追加できるファイルがありません。</string>
     <string name="toast_no_share_uri">共有可能なファイル URI が見つかりません。</string>
     <string name="toast_unsupported_share_content">現在はファイル共有のみ対応しています。テキストやリンクはまだアップロードできません。</string>
+    <string name="toast_no_upload_destinations">先に設定でアップロード先を追加してください。</string>
     <string name="toast_process_shared_failed">共有ファイルの処理に失敗しました。</string>
     <string name="toast_share_failed">共有に失敗しました：%1$s</string>
     <string name="share_adding_title">共有ファイルを OneDrive キューに追加しています...</string>
     <string name="share_adding_subtitle">ローカルのプライベート領域にコピーしています...</string>
+    <string name="share_choose_destination_title">アップロード先を選択</string>
+    <string name="share_choose_destination_subtitle">ファイルをキューに追加した後、元のアプリに戻ります。</string>
     <string name="settings_title">設定</string>
     <string name="back_to_upload_center">アップロード画面に戻る</string>
     <string name="onedrive_login_status">OneDrive ログイン状態</string>
@@ -46,6 +49,17 @@
     <string name="language_ko">한국어</string>
     <string name="language_es">Español</string>
     <string name="cancel">キャンセル</string>
+    <string name="save">保存</string>
+    <string name="edit">編集</string>
+    <string name="delete">削除</string>
+    <string name="upload_destinations">アップロード先</string>
+    <string name="upload_destinations_desc">名前付きのアップロード先を作成します。共有またはファイルを開くときは、まず App を選び、ダイアログでアップロード先を選択します。</string>
+    <string name="add_destination">アップロード先を追加</string>
+    <string name="edit_destination">アップロード先を編集</string>
+    <string name="destination_name">アップロード先の名前</string>
+    <string name="destination_account_label">OneDrive：%1$s</string>
+    <string name="destination_account_future_note">このアップロード先は現在サインイン中の OneDrive アカウントを使用します。複数アカウント対応後にアカウントを選択できます。</string>
+    <string name="no_folder_selected">フォルダーがまだ選択されていません</string>
     <string name="about_tagline">共有ファイルをすばやく OneDrive へ</string>
     <string name="app_information">アプリ情報</string>
     <string name="developer">開発者</string>
@@ -69,6 +83,7 @@
     <string name="no_upload_tasks">アップロードタスクはありません</string>
     <string name="no_upload_tasks_desc">共有されたファイルは、待機中、アップロード中、完了、キャンセル、失敗としてここに表示されます。</string>
     <string name="folder_label">フォルダー：%1$s</string>
+    <string name="destination_folder_label">%1$s · %2$s</string>
     <string name="error_label">エラー：%1$s</string>
     <string name="upload_failed_default">アップロードに失敗しました。</string>
     <string name="completed_at">%1$s に完了</string>
@@ -88,6 +103,7 @@
     <string name="upload_stage_initializing">アップロードを初期化しています...</string>
     <string name="upload_stage_get_token">Microsoft アクセス トークンを取得しています...</string>
     <string name="upload_stage_checking_cache">ローカル キャッシュ ファイルを確認しています...</string>
+    <string name="upload_stage_preparing_folder">アップロード先フォルダーを準備しています...</string>
     <string name="upload_stage_graph">Microsoft Graph にアップロードしています...</string>
     <string name="upload_stage_large_session">大きなファイルのアップロード セッションを作成しています...</string>
     <string name="upload_stage_small_progress">小さなファイルをアップロード中... %1$d%%</string>
@@ -114,11 +130,15 @@
     <string name="queued_for_upload">アップロード キューに追加しました。</string>
     <string name="error_load_onedrive_folders">OneDrive フォルダーを読み込めませんでした。</string>
     <string name="error_signin_browse_folders">フォルダーを参照する前に OneDrive にサインインしてください。</string>
+    <string name="error_folder_name_invalid">フォルダー名は空にできず、\\ / : * ? &quot; &lt; &gt; | は使用できません。</string>
+    <string name="error_create_onedrive_folder">OneDrive フォルダーを作成できませんでした。</string>
     <string name="choose_onedrive_folder">OneDrive フォルダーを選択</string>
-    <string name="manual_folder_path">フォルダー パスを入力</string>
-    <string name="use_typed_path">入力したパスを使用</string>
+    <string name="current_folder_path">現在のパス</string>
     <string name="root">ルート</string>
     <string name="refresh">更新</string>
-    <string name="no_subfolders">ここにサブフォルダーはありません。このフォルダーを使用できます。</string>
+    <string name="new_folder">新規フォルダー</string>
+    <string name="new_folder_name">フォルダー名</string>
+    <string name="create">作成</string>
+    <string name="no_subfolders">ここにサブフォルダーはありません。</string>
     <string name="use_this_folder">このフォルダーを使用</string>
 </resources>

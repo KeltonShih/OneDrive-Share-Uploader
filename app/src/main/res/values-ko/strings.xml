@@ -5,10 +5,13 @@
     <string name="toast_no_files_added">추가할 수 있는 파일이 없습니다.</string>
     <string name="toast_no_share_uri">공유 가능한 파일 URI를 찾을 수 없습니다.</string>
     <string name="toast_unsupported_share_content">현재는 파일 공유만 지원합니다. 텍스트와 링크는 아직 업로드할 수 없습니다.</string>
+    <string name="toast_no_upload_destinations">먼저 설정에서 업로드 대상을 추가하세요.</string>
     <string name="toast_process_shared_failed">공유 파일 처리에 실패했습니다.</string>
     <string name="toast_share_failed">공유 실패: %1$s</string>
     <string name="share_adding_title">공유 파일을 OneDrive 대기열에 추가하는 중...</string>
     <string name="share_adding_subtitle">로컬 비공개 저장소로 복사하는 중...</string>
+    <string name="share_choose_destination_title">업로드 대상 선택</string>
+    <string name="share_choose_destination_subtitle">파일을 대기열에 추가한 뒤 원래 앱으로 돌아갑니다.</string>
     <string name="settings_title">설정</string>
     <string name="back_to_upload_center">업로드 화면으로 돌아가기</string>
     <string name="onedrive_login_status">OneDrive 로그인 상태</string>
@@ -46,6 +49,17 @@
     <string name="language_ko">한국어</string>
     <string name="language_es">Español</string>
     <string name="cancel">취소</string>
+    <string name="save">저장</string>
+    <string name="edit">편집</string>
+    <string name="delete">삭제</string>
+    <string name="upload_destinations">업로드 대상</string>
+    <string name="upload_destinations_desc">이름이 있는 업로드 대상을 만듭니다. 파일을 공유하거나 열 때 먼저 App을 선택한 뒤 대화상자에서 대상을 선택합니다.</string>
+    <string name="add_destination">대상 추가</string>
+    <string name="edit_destination">대상 편집</string>
+    <string name="destination_name">대상 이름</string>
+    <string name="destination_account_label">OneDrive: %1$s</string>
+    <string name="destination_account_future_note">이 대상은 현재 로그인된 OneDrive 계정을 사용합니다. 다중 계정 지원이 추가되면 계정을 선택할 수 있습니다.</string>
+    <string name="no_folder_selected">아직 폴더가 선택되지 않았습니다</string>
     <string name="about_tagline">공유 파일을 OneDrive로 빠르게 업로드</string>
     <string name="app_information">앱 정보</string>
     <string name="developer">개발자</string>
@@ -69,6 +83,7 @@
     <string name="no_upload_tasks">업로드 작업 없음</string>
     <string name="no_upload_tasks_desc">이 앱으로 공유한 파일은 대기, 업로드 중, 완료, 취소 또는 실패 상태로 여기에 표시됩니다.</string>
     <string name="folder_label">폴더: %1$s</string>
+    <string name="destination_folder_label">%1$s · %2$s</string>
     <string name="error_label">오류: %1$s</string>
     <string name="upload_failed_default">업로드 작업에 실패했습니다.</string>
     <string name="completed_at">%1$s 완료</string>
@@ -88,6 +103,7 @@
     <string name="upload_stage_initializing">업로드 초기화 중...</string>
     <string name="upload_stage_get_token">Microsoft 액세스 토큰 가져오는 중...</string>
     <string name="upload_stage_checking_cache">로컬 캐시 파일 확인 중...</string>
+    <string name="upload_stage_preparing_folder">대상 폴더 준비 중...</string>
     <string name="upload_stage_graph">Microsoft Graph에 업로드 중...</string>
     <string name="upload_stage_large_session">대용량 파일 업로드 세션 생성 중...</string>
     <string name="upload_stage_small_progress">작은 파일 업로드 중... %1$d%%</string>
@@ -114,11 +130,15 @@
     <string name="queued_for_upload">업로드 대기열에 추가되었습니다.</string>
     <string name="error_load_onedrive_folders">OneDrive 폴더를 불러올 수 없습니다.</string>
     <string name="error_signin_browse_folders">폴더를 탐색하기 전에 OneDrive에 로그인하세요.</string>
+    <string name="error_folder_name_invalid">폴더 이름은 비워 둘 수 없으며 \\ / : * ? &quot; &lt; &gt; | 문자를 포함할 수 없습니다.</string>
+    <string name="error_create_onedrive_folder">OneDrive 폴더를 만들 수 없습니다.</string>
     <string name="choose_onedrive_folder">OneDrive 폴더 선택</string>
-    <string name="manual_folder_path">폴더 경로 직접 입력</string>
-    <string name="use_typed_path">입력한 경로 사용</string>
+    <string name="current_folder_path">현재 경로</string>
     <string name="root">루트</string>
     <string name="refresh">새로 고침</string>
-    <string name="no_subfolders">여기에 하위 폴더가 없습니다. 이 폴더를 사용할 수 있습니다.</string>
+    <string name="new_folder">새 폴더</string>
+    <string name="new_folder_name">폴더 이름</string>
+    <string name="create">만들기</string>
+    <string name="no_subfolders">여기에 하위 폴더가 없습니다.</string>
     <string name="use_this_folder">이 폴더 사용</string>
 </resources>

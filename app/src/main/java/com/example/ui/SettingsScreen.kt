@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Activity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,16 +14,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.auth.AuthState
 import com.example.data.model.AppLanguage
 import com.example.data.model.ConflictBehavior
+import com.example.data.model.UploadDestination
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,8 +38,16 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings by viewModel.appSettings.collectAsState()
     val authState by viewModel.authState.collectAsState()
+    val folderPickerState by viewModel.folderPickerState.collectAsState()
     val selectedLanguage = AppLanguage.fromCode(settings.languageCode)
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var editingDestination by remember { mutableStateOf<UploadDestination?>(null) }
+    var showDestinationDialog by remember { mutableStateOf(false) }
+    var folderPickerDestinationId by remember { mutableStateOf<String?>(null) }
+    var folderPickerReturnsToDialog by remember { mutableStateOf(false) }
+    var destinationDraftName by remember { mutableStateOf("") }
+    var destinationDraftPath by remember { mutableStateOf("") }
+    val draftDestinationId = "__draft_destination__"
 
     Scaffold(
         topBar = {
@@ -220,6 +232,78 @@ fun SettingsScreen(
                         containerColor = MaterialTheme.colorScheme.surface
                     )
                 )
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DriveFolderUpload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = stringResource(R.string.upload_destinations),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = {
+                                editingDestination = null
+                                destinationDraftName = ""
+                                destinationDraftPath = ""
+                                showDestinationDialog = true
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.add_destination))
+                        }
+                    }
+
+                    Text(
+                        text = stringResource(R.string.upload_destinations_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    HorizontalDivider()
+
+                    settings.uploadDestinations.sortedBy { it.sortOrder }.forEach { destination ->
+                        DestinationSettingsRow(
+                            destination = destination,
+                            canDelete = settings.uploadDestinations.size > 1,
+                            onEdit = {
+                                editingDestination = destination
+                                destinationDraftName = destination.displayName
+                                destinationDraftPath = destination.folderPath
+                                showDestinationDialog = true
+                            },
+                            onDelete = {
+                                viewModel.deleteDestination(destination.id)
+                            }
+                        )
+                    }
+                }
             }
 
             Card(
@@ -486,6 +570,244 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showDestinationDialog) {
+        DestinationEditDialog(
+            destination = editingDestination,
+            initialName = destinationDraftName,
+            initialPath = destinationDraftPath,
+            onDismiss = { showDestinationDialog = false },
+            onBrowse = { name, path ->
+                destinationDraftName = name
+                destinationDraftPath = path
+                folderPickerReturnsToDialog = true
+                folderPickerDestinationId = editingDestination?.id ?: draftDestinationId
+                showDestinationDialog = false
+                viewModel.openFolderPicker()
+            },
+            onSave = { name, path ->
+                val editing = editingDestination
+                if (editing == null) {
+                    viewModel.addDestination(name, path)
+                } else {
+                    viewModel.updateDestination(
+                        editing.copy(
+                            displayName = name,
+                            folderPath = path
+                        )
+                    )
+                }
+                showDestinationDialog = false
+            }
+        )
+    }
+
+    if (folderPickerState.isOpen && folderPickerDestinationId != null) {
+        OneDriveFolderPickerDialog(
+            state = folderPickerState,
+            onDismiss = {
+                if (folderPickerReturnsToDialog) {
+                    showDestinationDialog = true
+                }
+                folderPickerReturnsToDialog = false
+                folderPickerDestinationId = null
+                viewModel.closeFolderPicker()
+            },
+            onOpenFolder = { folder ->
+                viewModel.loadFolderChildren(folder.id, folder.path)
+            },
+            onUseCurrentFolder = {
+                val selectedPath = folderPickerState.currentPath.ifBlank { "/" }
+                val id = folderPickerDestinationId
+                if (folderPickerReturnsToDialog || id == draftDestinationId) {
+                    destinationDraftPath = selectedPath
+                    showDestinationDialog = true
+                } else {
+                    id?.let {
+                        viewModel.updateDestinationFolder(it, selectedPath)
+                    }
+                }
+                folderPickerReturnsToDialog = false
+                folderPickerDestinationId = null
+                viewModel.closeFolderPicker()
+            },
+            onCreateFolder = { folderName ->
+                viewModel.createFolderInPicker(folderName)
+            },
+            onRefresh = {
+                viewModel.loadFolderChildren(
+                    folderPickerState.currentItemId,
+                    folderPickerState.currentPath
+                )
+            },
+            onRoot = {
+                viewModel.loadFolderChildren(null, "")
+            }
+        )
+    }
+}
+
+@Composable
+private fun DestinationSettingsRow(
+    destination: UploadDestination,
+    canDelete: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = destination.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = destination.folderPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = stringResource(
+                        R.string.destination_account_label,
+                        destination.driveAccountLabel
+                            ?: UploadDestination.CURRENT_ACCOUNT_LABEL
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                TextButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.edit))
+                }
+                if (canDelete) {
+                    TextButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.delete))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationEditDialog(
+    destination: UploadDestination?,
+    initialName: String,
+    initialPath: String,
+    onDismiss: () -> Unit,
+    onBrowse: (String, String) -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var name by remember(destination?.id) {
+        mutableStateOf(initialName)
+    }
+    val path = remember(destination?.id, initialPath) {
+        mutableStateOf(initialPath)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (destination == null) {
+                    stringResource(R.string.add_destination)
+                } else {
+                    stringResource(R.string.edit_destination)
+                }
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.destination_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(
+                    onClick = { onBrowse(name, path.value) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.choose_upload_folder))
+                }
+                Text(
+                    text = path.value.ifBlank { stringResource(R.string.no_folder_selected) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (path.value.isBlank()) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.destination_account_future_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, path.value) },
+                enabled = name.isNotBlank() && path.value.isNotBlank()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable

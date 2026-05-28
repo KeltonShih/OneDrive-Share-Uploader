@@ -44,7 +44,6 @@ fun MainUploadCenterScreen(
     val uploadTasks by viewModel.uploadTasks.collectAsState()
     val authState by viewModel.authState.collectAsState()
     val settings by viewModel.appSettings.collectAsState()
-    val folderPickerState by viewModel.folderPickerState.collectAsState()
     val completedCount = uploadTasks.count {
         it.status == UploadStatus.SUCCESS || it.status == UploadStatus.CANCELED
     }
@@ -211,42 +210,72 @@ fun MainUploadCenterScreen(
                         ),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.current_upload_folder),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = settings.defaultFolder,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            FilledTonalIconButton(
-                                onClick = { viewModel.openFolderPicker() },
-                                enabled = authState is AuthState.SignedIn,
-                                modifier = Modifier.size(40.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.FolderOpen,
-                                    contentDescription = stringResource(R.string.choose_upload_folder)
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
+                                Text(
+                                    text = stringResource(R.string.upload_destinations),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            settings.uploadDestinations
+                                .sortedBy { it.sortOrder }
+                                .forEach { destination ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (destination.isEnabled) {
+                                                        Color(0xFF48BB78)
+                                                    } else {
+                                                        MaterialTheme.colorScheme.outline
+                                                    }
+                                                )
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = destination.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = destination.folderPath,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Switch(
+                                            checked = destination.isEnabled,
+                                            onCheckedChange = { enabled ->
+                                                viewModel.updateDestinationEnabled(destination.id, enabled)
+                                            }
+                                        )
+                                    }
                             }
                         }
                     }
@@ -337,31 +366,6 @@ fun MainUploadCenterScreen(
         }
     }
 
-    if (folderPickerState.isOpen) {
-        OneDriveFolderPickerDialog(
-            state = folderPickerState,
-            manualPath = settings.defaultFolder,
-            onDismiss = { viewModel.closeFolderPicker() },
-            onOpenFolder = { folder ->
-                viewModel.loadFolderChildren(folder.id, folder.path)
-            },
-            onUseCurrentFolder = {
-                viewModel.selectFolderFromPicker(folderPickerState.currentPath)
-            },
-            onUseManualFolder = { path ->
-                viewModel.selectFolderFromPicker(path)
-            },
-            onRefresh = {
-                viewModel.loadFolderChildren(
-                    folderPickerState.currentItemId,
-                    folderPickerState.currentPath
-                )
-            },
-            onRoot = {
-                viewModel.loadFolderChildren(null, "")
-            }
-        )
-    }
 }
 
 @Composable
@@ -415,7 +419,11 @@ fun UploadTaskCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = stringResource(R.string.folder_label, job.targetFolder),
+                        text = stringResource(
+                            R.string.destination_folder_label,
+                            job.destinationName,
+                            job.targetFolder
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

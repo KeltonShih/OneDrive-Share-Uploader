@@ -9,8 +9,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.AppSettings
 import com.example.data.model.ConflictBehavior
+import com.example.data.model.UploadDestination
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -22,11 +25,17 @@ class DataStoreManager(private val context: Context) {
         val WIFI_ONLY_KEY = booleanPreferencesKey("wifi_only")
         val RULES_ENABLED_KEY = booleanPreferencesKey("rules_enabled")
         val LANGUAGE_CODE_KEY = stringPreferencesKey("language_code")
+        val DESTINATIONS_JSON_KEY = stringPreferencesKey("destinations_json")
     }
 
     val appSettingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
+        val defaultFolder = preferences[DEFAULT_FOLDER_KEY] ?: "/Upload"
+        val destinations = parseDestinations(
+            preferences[DESTINATIONS_JSON_KEY],
+            defaultFolder
+        )
         AppSettings(
-            defaultFolder = preferences[DEFAULT_FOLDER_KEY] ?: "/Upload",
+            defaultFolder = defaultFolder,
             conflictBehavior = try {
                 ConflictBehavior.valueOf(preferences[CONFLICT_BEHAVIOR_KEY] ?: ConflictBehavior.RENAME.name)
             } catch (e: Exception) {
@@ -34,13 +43,21 @@ class DataStoreManager(private val context: Context) {
             },
             wifiOnly = preferences[WIFI_ONLY_KEY] ?: false,
             rulesEnabled = preferences[RULES_ENABLED_KEY] ?: false,
-            languageCode = preferences[LANGUAGE_CODE_KEY] ?: AppSettings().languageCode
+            languageCode = preferences[LANGUAGE_CODE_KEY] ?: AppSettings().languageCode,
+            uploadDestinations = destinations
         )
     }
 
     suspend fun updateDefaultFolder(folder: String) {
         context.dataStore.edit { preferences ->
             preferences[DEFAULT_FOLDER_KEY] = folder
+            val destinations = parseDestinations(preferences[DESTINATIONS_JSON_KEY], folder)
+            val updated = destinations
+                .sortedBy { it.sortOrder }
+                .mapIndexed { index, destination ->
+                    if (index == 0) destination.copy(folderPath = folder) else destination
+                }
+            preferences[DESTINATIONS_JSON_KEY] = encodeDestinations(updated)
         }
     }
 
@@ -66,5 +83,95 @@ class DataStoreManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[LANGUAGE_CODE_KEY] = languageCode
         }
+    }
+
+    suspend fun updateUploadDestinations(destinations: List<UploadDestination>) {
+        context.dataStore.edit { preferences ->
+            val normalized = normalizeDestinations(
+                destinations,
+                preferences[DEFAULT_FOLDER_KEY] ?: "/Upload"
+            )
+            preferences[DESTINATIONS_JSON_KEY] = encodeDestinations(normalized)
+            preferences[DEFAULT_FOLDER_KEY] = normalized
+                .sortedBy { it.sortOrder }
+                .firstOrNull()
+                ?.folderPath
+                ?: "/Upload"
+        }
+    }
+
+    private fun parseDestinations(json: String?, defaultFolder: String): List<UploadDestination> {
+        if (json.isNullOrBlank()) {
+            return listOf(UploadDestination.default(defaultFolder))
+        }
+
+        return runCatching {
+            val array = JSONArray(json)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    val id = item.optString("id").takeIf { it.isNotBlank() }
+                        ?: "destination-$index"
+                    val name = item.optString("displayName").takeIf { it.isNotBlank() }
+                        ?: UploadDestination.DEFAULT_NAME
+                    val folder = item.optString("folderPath").takeIf { it.isNotBlank() }
+                        ?: defaultFolder
+                    add(
+                        UploadDestination(
+                            id = id,
+                            displayName = name,
+                            folderPath = normalizeFolder(folder),
+                            driveAccountId = item.optString("driveAccountId").takeIf { it.isNotBlank() },
+                            driveAccountLabel = item.optString("driveAccountLabel").takeIf { it.isNotBlank() }
+                                ?: UploadDestination.CURRENT_ACCOUNT_LABEL,
+                            isEnabled = item.optBoolean("isEnabled", true),
+                            sortOrder = item.optInt("sortOrder", index)
+                        )
+                    )
+                }
+            }
+        }.getOrElse {
+            listOf(UploadDestination.default(defaultFolder))
+        }.let { normalizeDestinations(it, defaultFolder) }
+    }
+
+    private fun encodeDestinations(destinations: List<UploadDestination>): String {
+        val array = JSONArray()
+        normalizeDestinations(destinations, "/Upload").forEach { destination ->
+            array.put(JSONObject().apply {
+                put("id", destination.id)
+                put("displayName", destination.displayName)
+                put("folderPath", destination.folderPath)
+                put("driveAccountId", destination.driveAccountId)
+                put("driveAccountLabel", destination.driveAccountLabel)
+                put("isEnabled", destination.isEnabled)
+                put("sortOrder", destination.sortOrder)
+            })
+        }
+        return array.toString()
+    }
+
+    private fun normalizeDestinations(
+        destinations: List<UploadDestination>,
+        defaultFolder: String
+    ): List<UploadDestination> {
+        val fallback = UploadDestination.default(defaultFolder)
+        val source = destinations.ifEmpty { listOf(fallback) }
+        return source
+            .mapIndexed { index, destination ->
+                val name = destination.displayName.trim().ifBlank { UploadDestination.DEFAULT_NAME }
+                destination.copy(
+                    displayName = name,
+                    folderPath = normalizeFolder(destination.folderPath.ifBlank { defaultFolder }),
+                    driveAccountLabel = destination.driveAccountLabel
+                        ?: UploadDestination.CURRENT_ACCOUNT_LABEL,
+                    sortOrder = index
+                )
+            }
+    }
+
+    private fun normalizeFolder(path: String): String {
+        val trimmed = path.trim().trim('/')
+        return if (trimmed.isBlank()) "/" else "/$trimmed"
     }
 }

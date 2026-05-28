@@ -16,28 +16,41 @@ object FolderResolver {
             return settings.defaultFolder
         }
 
+        return resolveTargetFolder(fileName, mimeType, settings.defaultFolder, settings.rulesEnabled)
+    }
+
+    fun resolveTargetFolder(
+        fileName: String,
+        mimeType: String?,
+        baseFolder: String,
+        rulesEnabled: Boolean
+    ): String {
+        if (!rulesEnabled) {
+            return baseFolder
+        }
+
         val mime = mimeType?.lowercase() ?: ""
         val lowercaseName = fileName.lowercase()
 
         // Route routing rules:
         return when {
             mime.startsWith("image/") -> {
-                combinePaths(settings.defaultFolder, "Images")
+                combinePaths(baseFolder, "Images")
             }
             mime.startsWith("video/") -> {
-                combinePaths(settings.defaultFolder, "Videos")
+                combinePaths(baseFolder, "Videos")
             }
             mime == "application/pdf" || lowercaseName.endsWith(".pdf") -> {
-                combinePaths(settings.defaultFolder, "PDF")
+                combinePaths(baseFolder, "PDF")
             }
             mime == "application/vnd.ms-excel" || 
             mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
             lowercaseName.endsWith(".xls") || 
             lowercaseName.endsWith(".xlsx") -> {
-                combinePaths(settings.defaultFolder, "Excel")
+                combinePaths(baseFolder, "Excel")
             }
             else -> {
-                combinePaths(settings.defaultFolder, "Others")
+                combinePaths(baseFolder, "Others")
             }
         }
     }

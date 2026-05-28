@@ -17,9 +17,11 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.DataStoreManager
 import com.example.data.model.AppSettings
 import com.example.data.model.ConflictBehavior
+import com.example.data.model.UploadDestination
 import com.example.data.model.UploadJobEntity
 import com.example.data.model.UploadStatus
 import com.example.data.repository.UploadRepository
+import com.example.util.DestinationShortcutPublisher
 import com.example.util.FileHelper
 import com.example.util.FolderResolver
 import com.example.util.LocaleHelper
@@ -33,7 +35,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.net.URLEncoder
@@ -119,10 +123,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .enqueueUniqueWork("OneDriveUploader", ExistingWorkPolicy.REPLACE, uploadWorkRequest)
     }
 
-    fun addSelectedFiles(uris: List<Uri>, onResult: (AddFilesResult) -> Unit) {
+    fun addSelectedFiles(
+        uris: List<Uri>,
+        destinationId: String? = null,
+        onResult: (AddFilesResult) -> Unit
+    ) {
         viewModelScope.launch {
             val settings = dataStoreManager.appSettingsFlow.first()
             val textContext = LocaleHelper.localizedContext(context, settings.languageCode)
+            val destination = destinationId
+                ?.let { id -> settings.uploadDestinations.firstOrNull { it.id == id } }
+                ?: settings.defaultDestination
             var addedCount = 0
             var failedCount = 0
 
@@ -132,7 +143,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val originalName = FileHelper.queryDisplayName(context, uri)
                         val sanitizedName = FileHelper.sanitizeFileName(originalName)
                         val mimeType = FileHelper.getMimeType(context, uri)
-                        val targetFolder = FolderResolver.resolveTargetFolder(sanitizedName, mimeType, settings)
+                        val targetFolder = FolderResolver.resolveTargetFolder(
+                            sanitizedName,
+                            mimeType,
+                            destination.folderPath,
+                            settings.rulesEnabled
+                        )
                         val fileSize = FileHelper.queryFileSize(context, uri)
                         val cacheFile = FileHelper.copyUriToCache(context, uri, sanitizedName)
                         val finalSize = if (fileSize > 0) fileSize else cacheFile.length()
@@ -145,6 +161,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             mimeType = mimeType,
                             fileSize = finalSize,
                             targetFolder = targetFolder,
+                            destinationId = destination.id,
+                            destinationName = destination.displayName,
+                            driveAccountId = destination.driveAccountId,
+                            driveAccountLabel = destination.driveAccountLabel,
                             status = UploadStatus.QUEUED,
                             progress = 0,
                             uploadedBytes = 0L,
@@ -165,7 +185,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val sanitizedName = FileHelper.sanitizeFileName(originalName)
                         val mimeType = runCatching { FileHelper.getMimeType(context, uri) }
                             .getOrDefault("application/octet-stream")
-                        val targetFolder = FolderResolver.resolveTargetFolder(sanitizedName, mimeType, settings)
+                        val targetFolder = FolderResolver.resolveTargetFolder(
+                            sanitizedName,
+                            mimeType,
+                            destination.folderPath,
+                            settings.rulesEnabled
+                        )
                         val now = System.currentTimeMillis()
                         val failedJob = UploadJobEntity(
                             id = UUID.randomUUID().toString(),
@@ -175,6 +200,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             mimeType = mimeType,
                             fileSize = 0L,
                             targetFolder = targetFolder,
+                            destinationId = destination.id,
+                            destinationName = destination.displayName,
+                            driveAccountId = destination.driveAccountId,
+                            driveAccountLabel = destination.driveAccountLabel,
                             status = UploadStatus.FAILED,
                             progress = 0,
                             uploadedBytes = 0L,
@@ -255,6 +284,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateDefaultFolder(folder: String) {
         viewModelScope.launch {
             dataStoreManager.updateDefaultFolder(folder)
+            clearShareShortcuts()
         }
     }
 
@@ -282,6 +312,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             dataStoreManager.updateLanguageCode(languageCode)
         }
+    }
+
+    fun addDestination(displayName: String, folderPath: String) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            val nextOrder = (settings.uploadDestinations.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            val destination = UploadDestination(
+                id = UUID.randomUUID().toString(),
+                displayName = displayName.trim().ifBlank { UploadDestination.DEFAULT_NAME },
+                folderPath = normalizeFolderPath(folderPath),
+                driveAccountId = null,
+                driveAccountLabel = UploadDestination.CURRENT_ACCOUNT_LABEL,
+                isEnabled = true,
+                sortOrder = nextOrder
+            )
+            saveDestinations(settings.uploadDestinations + destination)
+        }
+    }
+
+    fun updateDestination(destination: UploadDestination) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            val updated = settings.uploadDestinations.map {
+                if (it.id == destination.id) {
+                    destination.copy(
+                        displayName = destination.displayName.trim()
+                            .ifBlank { UploadDestination.DEFAULT_NAME },
+                        folderPath = normalizeFolderPath(destination.folderPath)
+                    )
+                } else {
+                    it
+                }
+            }
+            saveDestinations(updated)
+        }
+    }
+
+    fun updateDestinationFolder(destinationId: String, folderPath: String) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            val updated = settings.uploadDestinations.map {
+                if (it.id == destinationId) {
+                    it.copy(folderPath = normalizeFolderPath(folderPath))
+                } else {
+                    it
+                }
+            }
+            saveDestinations(updated)
+        }
+    }
+
+    fun updateDestinationEnabled(destinationId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            val updated = settings.uploadDestinations.map {
+                if (it.id == destinationId) it.copy(isEnabled = enabled) else it
+            }
+            saveDestinations(updated)
+        }
+    }
+
+    fun deleteDestination(destinationId: String) {
+        viewModelScope.launch {
+            val settings = dataStoreManager.appSettingsFlow.first()
+            val remaining = settings.uploadDestinations.filterNot { it.id == destinationId }
+            saveDestinations(remaining.ifEmpty { listOf(UploadDestination.default(settings.defaultFolder)) })
+        }
+    }
+
+    suspend fun enabledDestinationsOnce(): List<UploadDestination> {
+        return dataStoreManager.appSettingsFlow.first().enabledDestinations
+    }
+
+    fun clearShareShortcuts() {
+        DestinationShortcutPublisher.clear(context)
     }
 
     fun openFolderPicker() {
@@ -317,6 +422,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         folders = emptyList(),
                         errorMessage = error.message
                             ?: localizedTextContext().getString(R.string.error_load_onedrive_folders)
+                    )
+                }
+            )
+        }
+    }
+
+    fun createFolderInPicker(folderName: String) {
+        val trimmedName = folderName.trim()
+        if (trimmedName.isBlank() || trimmedName.any { it in "\\/:*?\"<>|" }) {
+            _folderPickerState.value = _folderPickerState.value.copy(
+                errorMessage = localizedTextContext().getString(R.string.error_folder_name_invalid)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val currentState = _folderPickerState.value
+            _folderPickerState.value = currentState.copy(isLoading = true, errorMessage = null)
+
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    createOneDriveFolder(
+                        parentItemId = currentState.currentItemId,
+                        parentPath = currentState.currentPath,
+                        folderName = trimmedName
+                    )
+                }
+            }
+
+            result.fold(
+                onSuccess = { folder ->
+                    loadFolderChildren(folder.id, folder.path)
+                },
+                onFailure = { error ->
+                    _folderPickerState.value = _folderPickerState.value.copy(
+                        isLoading = false,
+                        errorMessage = error.message
+                            ?: localizedTextContext().getString(R.string.error_create_onedrive_folder)
                     )
                 }
             )
@@ -367,6 +510,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun createOneDriveFolder(
+        parentItemId: String?,
+        parentPath: String,
+        folderName: String
+    ): OneDriveFolder {
+        val token = msalAuthManager.getAccessTokenSilently()
+            ?: throw IllegalStateException(
+                localizedTextContext().getString(R.string.error_signin_browse_folders)
+            )
+
+        val endpoint = if (parentItemId == null) {
+            "https://graph.microsoft.com/v1.0/me/drive/root/children"
+        } else {
+            "https://graph.microsoft.com/v1.0/me/drive/items/${urlEncode(parentItemId)}/children"
+        }
+        val bodyJson = JSONObject().apply {
+            put("name", folderName)
+            put("folder", JSONObject())
+            put("@microsoft.graph.conflictBehavior", "fail")
+        }
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(bodyJson.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException(parseGraphError(body, response.code))
+            }
+            val item = JSONObject(body)
+            val id = item.optString("id")
+            val name = item.optString("name", folderName)
+            if (id.isBlank()) {
+                throw IllegalStateException(
+                    localizedTextContext().getString(R.string.error_create_onedrive_folder)
+                )
+            }
+            return OneDriveFolder(id = id, name = name, path = joinFolderPath(parentPath, name))
+        }
+    }
+
     private fun parseGraphError(body: String, code: Int): String {
         return try {
             val error = JSONObject(body).getJSONObject("error")
@@ -379,6 +565,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun normalizeFolderPath(path: String): String {
         val trimmed = path.trim().trim('/')
         return if (trimmed.isBlank()) "/" else "/$trimmed"
+    }
+
+    private suspend fun saveDestinations(destinations: List<UploadDestination>) {
+        val normalized = destinations
+            .sortedBy { it.sortOrder }
+            .mapIndexed { index, destination -> destination.copy(sortOrder = index) }
+        dataStoreManager.updateUploadDestinations(normalized)
+        DestinationShortcutPublisher.clear(context)
     }
 
     private fun localizedTextContext() =

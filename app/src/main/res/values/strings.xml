@@ -5,10 +5,13 @@
     <string name="toast_no_files_added">No files could be added.</string>
     <string name="toast_no_share_uri">No shareable file URI found in intent.</string>
     <string name="toast_unsupported_share_content">This app only supports sharing files. Text and links cannot be uploaded yet.</string>
+    <string name="toast_no_upload_destinations">Please add an upload destination in Settings first.</string>
     <string name="toast_process_shared_failed">Failed to process shared files.</string>
     <string name="toast_share_failed">Share failed: %1$s</string>
     <string name="share_adding_title">Adding shared file(s) to OneDrive queue...</string>
     <string name="share_adding_subtitle">Copying to local private storage...</string>
+    <string name="share_choose_destination_title">Choose Upload Destination</string>
+    <string name="share_choose_destination_subtitle">The file will be queued and you will return to the previous app.</string>
 
     <string name="settings_title">Settings</string>
     <string name="back_to_upload_center">Back to Upload Center</string>
@@ -47,6 +50,17 @@
     <string name="language_ko">한국어</string>
     <string name="language_es">Español</string>
     <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="upload_destinations">Upload Destinations</string>
+    <string name="upload_destinations_desc">Create named upload destinations. When you share or open a file, choose the app first, then pick the destination in the dialog.</string>
+    <string name="add_destination">Add Destination</string>
+    <string name="edit_destination">Edit Destination</string>
+    <string name="destination_name">Destination name</string>
+    <string name="destination_account_label">OneDrive: %1$s</string>
+    <string name="destination_account_future_note">This destination currently uses the signed-in OneDrive account. Account selection will be available when multi-account support is added.</string>
+    <string name="no_folder_selected">No folder selected yet</string>
 
     <string name="about_tagline">Fast share-to-OneDrive uploads</string>
     <string name="app_information">App Information</string>
@@ -72,6 +86,7 @@
     <string name="no_upload_tasks">No Upload Tasks</string>
     <string name="no_upload_tasks_desc">Files shared to this app will stay here while queued, uploading, completed, canceled, or failed.</string>
     <string name="folder_label">Folder: %1$s</string>
+    <string name="destination_folder_label">%1$s · %2$s</string>
     <string name="error_label">Error: %1$s</string>
     <string name="upload_failed_default">Upload operation failed.</string>
     <string name="completed_at">Completed %1$s</string>
@@ -91,6 +106,7 @@
     <string name="upload_stage_initializing">Initializing upload...</string>
     <string name="upload_stage_get_token">Getting Microsoft access token...</string>
     <string name="upload_stage_checking_cache">Checking local cached file...</string>
+    <string name="upload_stage_preparing_folder">Preparing destination folder...</string>
     <string name="upload_stage_graph">Uploading to Microsoft Graph...</string>
     <string name="upload_stage_large_session">Creating large-file upload session...</string>
     <string name="upload_stage_small_progress">Uploading small file... %1$d%%</string>
@@ -117,12 +133,16 @@
     <string name="queued_for_upload">Queued for upload.</string>
     <string name="error_load_onedrive_folders">Could not load OneDrive folders.</string>
     <string name="error_signin_browse_folders">Please sign in to OneDrive before browsing folders.</string>
+    <string name="error_folder_name_invalid">Folder name cannot be empty or contain \\ / : * ? &quot; &lt; &gt; |</string>
+    <string name="error_create_onedrive_folder">Could not create OneDrive folder.</string>
 
     <string name="choose_onedrive_folder">Choose OneDrive Folder</string>
-    <string name="manual_folder_path">Manual folder path</string>
-    <string name="use_typed_path">Use Typed Path</string>
+    <string name="current_folder_path">Current path</string>
     <string name="root">Root</string>
     <string name="refresh">Refresh</string>
-    <string name="no_subfolders">No subfolders here. You can still use this folder.</string>
+    <string name="new_folder">New Folder</string>
+    <string name="new_folder_name">Folder name</string>
+    <string name="create">Create</string>
+    <string name="no_subfolders">No subfolders here.</string>
     <string name="use_this_folder">Use This Folder</string>
 </resources>

@@ -39,10 +39,14 @@
         <!-- SHARE MENU INPUT ENTRY POINT -->
         <activity
             android:name=".ShareUploadActivity"
+            android:excludeFromRecents="true"
             android:exported="true"
+            android:finishOnTaskLaunch="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyApplication">
-            
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MyApplication.Dialog">
+
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
