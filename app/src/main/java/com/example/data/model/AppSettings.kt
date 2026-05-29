@@ -10,7 +10,7 @@ data class AppSettings(
 ) {
     val enabledDestinations: List<UploadDestination>
         get() = uploadDestinations
-            .filter { it.isEnabled }
+            .filter { it.isEnabled && !it.driveAccountId.isNullOrBlank() }
             .sortedBy { it.sortOrder }
 
     val defaultDestination: UploadDestination

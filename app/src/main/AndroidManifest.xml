@@ -76,10 +76,12 @@
             </intent-filter>
         </activity>
 
-        <!-- MSAL REDIRECTION BROWSER TAB ACTIVITY -->
+        <!-- Microsoft OAuth PKCE redirect entry point -->
         <activity
-            android:name="com.microsoft.identity.client.BrowserTabActivity"
-            android:exported="true">
+            android:name=".auth.OAuthRedirectActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

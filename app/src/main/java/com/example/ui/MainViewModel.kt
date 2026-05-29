@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import com.example.R
 import com.example.auth.AuthState
 import com.example.auth.MsalAuthManager
+import com.example.auth.OneDriveAccount
 import com.example.data.local.AppDatabase
 import com.example.data.local.DataStoreManager
 import com.example.data.model.AppSettings
@@ -28,6 +29,7 @@ import com.example.util.LocaleHelper
 import com.example.worker.UploadWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -56,6 +58,8 @@ data class FolderPickerUiState(
     val folders: List<OneDriveFolder> = emptyList(),
     val currentItemId: String? = null,
     val currentPath: String = "",
+    val driveAccountId: String? = null,
+    val driveAccountLabel: String? = null,
     val errorMessage: String? = null
 )
 
@@ -91,10 +95,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     val appSettings: StateFlow<AppSettings> = dataStoreManager.appSettingsFlow
+        .map { it.withResolvedDestinationNames() }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = AppSettings()
+            initialValue = AppSettings().withResolvedDestinationNames()
         )
 
     val authState: StateFlow<AuthState> = msalAuthManager.authStateFlow
@@ -136,6 +141,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ?: settings.defaultDestination
             var addedCount = 0
             var failedCount = 0
+
+            if (destination.driveAccountId.isNullOrBlank()) {
+                onResult(AddFilesResult(0, uris.size))
+                return@launch
+            }
 
             withContext(Dispatchers.IO) {
                 for (uri in uris) {
@@ -314,16 +324,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addDestination(displayName: String, folderPath: String) {
+    fun addDestination(
+        displayName: String,
+        folderPath: String,
+        driveAccountId: String,
+        driveAccountLabel: String
+    ) {
         viewModelScope.launch {
             val settings = dataStoreManager.appSettingsFlow.first()
             val nextOrder = (settings.uploadDestinations.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            val normalizedFolderPath = normalizeFolderPath(folderPath)
             val destination = UploadDestination(
                 id = UUID.randomUUID().toString(),
-                displayName = displayName.trim().ifBlank { UploadDestination.DEFAULT_NAME },
-                folderPath = normalizeFolderPath(folderPath),
-                driveAccountId = null,
-                driveAccountLabel = UploadDestination.CURRENT_ACCOUNT_LABEL,
+                displayName = resolvedDestinationName(displayName, normalizedFolderPath),
+                folderPath = normalizedFolderPath,
+                driveAccountId = driveAccountId,
+                driveAccountLabel = driveAccountLabel,
                 isEnabled = true,
                 sortOrder = nextOrder
             )
@@ -336,10 +352,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val settings = dataStoreManager.appSettingsFlow.first()
             val updated = settings.uploadDestinations.map {
                 if (it.id == destination.id) {
+                    val normalizedFolderPath = normalizeFolderPath(destination.folderPath)
                     destination.copy(
-                        displayName = destination.displayName.trim()
-                            .ifBlank { UploadDestination.DEFAULT_NAME },
-                        folderPath = normalizeFolderPath(destination.folderPath)
+                        displayName = resolvedDestinationName(destination.displayName, normalizedFolderPath),
+                        folderPath = normalizedFolderPath
                     )
                 } else {
                     it
@@ -367,7 +383,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val settings = dataStoreManager.appSettingsFlow.first()
             val updated = settings.uploadDestinations.map {
-                if (it.id == destinationId) it.copy(isEnabled = enabled) else it
+                if (it.id == destinationId) {
+                    it.copy(isEnabled = enabled && it.driveAccountId != null)
+                } else {
+                    it
+                }
             }
             saveDestinations(updated)
         }
@@ -385,12 +405,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return dataStoreManager.appSettingsFlow.first().enabledDestinations
     }
 
+    suspend fun accountsOnce(): List<OneDriveAccount> {
+        return msalAuthManager.loadAccounts()
+    }
+
     fun clearShareShortcuts() {
         DestinationShortcutPublisher.clear(context)
     }
 
-    fun openFolderPicker() {
-        _folderPickerState.value = FolderPickerUiState(isOpen = true, isLoading = true)
+    fun openFolderPicker(account: OneDriveAccount) {
+        _folderPickerState.value = FolderPickerUiState(
+            isOpen = true,
+            isLoading = true,
+            driveAccountId = account.id,
+            driveAccountLabel = account.label
+        )
         loadFolderChildren(itemId = null, path = "")
     }
 
@@ -408,8 +437,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 errorMessage = null
             )
 
+            val accountId = _folderPickerState.value.driveAccountId
             val result = withContext(Dispatchers.IO) {
-                runCatching { fetchOneDriveFolders(itemId, path) }
+                runCatching { fetchOneDriveFolders(accountId, itemId, path) }
             }
 
             _folderPickerState.value = result.fold(
@@ -444,6 +474,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     createOneDriveFolder(
+                        accountId = currentState.driveAccountId,
                         parentItemId = currentState.currentItemId,
                         parentPath = currentState.currentPath,
                         folderName = trimmedName
@@ -472,8 +503,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         closeFolderPicker()
     }
 
-    private suspend fun fetchOneDriveFolders(itemId: String?, parentPath: String): List<OneDriveFolder> {
-        val token = msalAuthManager.getAccessTokenSilently()
+    private suspend fun fetchOneDriveFolders(
+        accountId: String?,
+        itemId: String?,
+        parentPath: String
+    ): List<OneDriveFolder> {
+        val token = msalAuthManager.getAccessTokenSilently(accountId)
             ?: throw IllegalStateException(
                 localizedTextContext().getString(R.string.error_signin_browse_folders)
             )
@@ -511,11 +546,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun createOneDriveFolder(
+        accountId: String?,
         parentItemId: String?,
         parentPath: String,
         folderName: String
     ): OneDriveFolder {
-        val token = msalAuthManager.getAccessTokenSilently()
+        val token = msalAuthManager.getAccessTokenSilently(accountId)
             ?: throw IllegalStateException(
                 localizedTextContext().getString(R.string.error_signin_browse_folders)
             )
@@ -567,6 +603,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (trimmed.isBlank()) "/" else "/$trimmed"
     }
 
+    private fun resolvedDestinationName(displayName: String, folderPath: String): String {
+        val trimmedName = displayName.trim()
+        if (trimmedName.isNotBlank() && trimmedName != UploadDestination.DEFAULT_NAME) {
+            return trimmedName
+        }
+        return folderPath.trim()
+            .trim('/')
+            .substringAfterLast('/')
+            .ifBlank { UploadDestination.DEFAULT_NAME }
+    }
+
+    private fun AppSettings.withResolvedDestinationNames(): AppSettings {
+        val resolvedDestinations = uploadDestinations.map { destination ->
+            val normalizedFolderPath = normalizeFolderPath(destination.folderPath)
+            val resolvedName = resolvedDestinationName(destination.displayName, normalizedFolderPath)
+            destination.copy(
+                displayName = resolvedName,
+                folderPath = normalizedFolderPath
+            )
+        }
+        return copy(
+            uploadDestinations = resolvedDestinations
+        )
+    }
+
     private suspend fun saveDestinations(destinations: List<UploadDestination>) {
         val normalized = destinations
             .sortedBy { it.sortOrder }
@@ -586,10 +647,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun urlEncode(value: String): String =
         URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
-    fun signIn(activity: Activity, onResult: (Result<Unit>) -> Unit) {
+    fun signIn(activity: Activity, onResult: (Result<OneDriveAccount>) -> Unit) {
         msalAuthManager.signIn(activity) { result ->
-            if (result.isSuccess) {
-                onResult(Result.success(Unit))
+            val account = result.getOrNull()
+            if (account != null) {
+                onResult(Result.success(account))
                 // Resume uploads if signed in
                 triggerWorkManager()
             } else {
@@ -598,13 +660,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun signOut(onResult: (Result<Unit>) -> Unit) {
-        msalAuthManager.signOut { result ->
+    fun retryAuthInitialization() {
+        msalAuthManager.retryInitialization()
+    }
+
+    fun removeAccount(accountId: String, onResult: (Result<Unit>) -> Unit) {
+        msalAuthManager.removeAccount(accountId) { result ->
             if (result.isSuccess) {
-                onResult(Result.success(Unit))
+                viewModelScope.launch {
+                    disableDestinationsForAccount(accountId)
+                    onResult(Result.success(Unit))
+                }
             } else {
-                onResult(Result.failure(result.exceptionOrNull() ?: Exception("Sign-out failed")))
+                onResult(Result.failure(result.exceptionOrNull() ?: Exception("Remove account failed")))
             }
         }
+    }
+
+    fun renameAccount(accountId: String, alias: String, onResult: (Result<Unit>) -> Unit) {
+        msalAuthManager.renameAccount(accountId, alias) { result ->
+            if (result.isSuccess) {
+                val account = result.getOrNull()
+                viewModelScope.launch {
+                    if (account != null) {
+                        updateDestinationAccountLabels(account.id, account.label)
+                    }
+                    onResult(Result.success(Unit))
+                }
+            } else {
+                onResult(Result.failure(result.exceptionOrNull() ?: Exception("Rename account failed")))
+            }
+        }
+    }
+
+    private suspend fun disableDestinationsForAccount(accountId: String) {
+        val settings = dataStoreManager.appSettingsFlow.first()
+        val updated = settings.uploadDestinations.map { destination ->
+            if (destination.driveAccountId == accountId) {
+                destination.copy(
+                    driveAccountId = null,
+                    driveAccountLabel = UploadDestination.ACCOUNT_NOT_SELECTED_LABEL,
+                    isEnabled = false
+                )
+            } else {
+                destination
+            }
+        }
+        saveDestinations(updated)
+    }
+
+    private suspend fun updateDestinationAccountLabels(accountId: String, accountLabel: String) {
+        val settings = dataStoreManager.appSettingsFlow.first()
+        val updated = settings.uploadDestinations.map { destination ->
+            if (destination.driveAccountId == accountId) {
+                destination.copy(driveAccountLabel = accountLabel)
+            } else {
+                destination
+            }
+        }
+        saveDestinations(updated)
     }
 }

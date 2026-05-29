@@ -124,10 +124,13 @@ class UploadWorker(
         // 2. Fetch MSAL Access Token
         updateJobStage(uploadingJob, t(R.string.upload_stage_get_token))
         val token = withTimeoutOrNull(30_000L) {
-            msalAuthManager.getAccessTokenSilently()
+            msalAuthManager.getAccessTokenSilently(uploadingJob.driveAccountId)
         }
         if (token == null) {
-            val error = t(R.string.error_token_required)
+            val error = t(
+                R.string.error_account_token_required,
+                uploadingJob.driveAccountLabel ?: t(R.string.no_onedrive_account_selected)
+            )
             markJobFailed(uploadingJob, error)
             return
         }

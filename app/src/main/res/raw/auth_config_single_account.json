@@ -2,8 +2,8 @@
   "client_id": "cb45b6ab-7f03-4011-8143-0a7cbed0325e",
   "authorization_user_agent": "DEFAULT",
   "redirect_uri": "msauth://com.keltonshih.onedriveshareuploader/yDRtUMXdQVe3Lt8eXOC8TRTFPH0%3D",
-  "account_mode": "SINGLE",
-  "broker_redirect_uri_registered": true,
+  "account_mode": "MULTIPLE",
+  "broker_redirect_uri_registered": false,
   "authorities": [
     {
       "type": "AAD",

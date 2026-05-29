@@ -11,17 +11,25 @@ data class UploadDestination(
 ) {
     companion object {
         const val DEFAULT_ID = "default-upload"
-        const val DEFAULT_NAME = "Upload"
+        const val DEFAULT_NAME = "New Destination"
         const val CURRENT_ACCOUNT_LABEL = "Current Account"
+        const val ACCOUNT_NOT_SELECTED_LABEL = "Account not selected"
 
         fun default(folderPath: String = "/Upload") = UploadDestination(
             id = DEFAULT_ID,
-            displayName = DEFAULT_NAME,
+            displayName = displayNameFromPath(folderPath),
             folderPath = folderPath,
             driveAccountId = null,
-            driveAccountLabel = CURRENT_ACCOUNT_LABEL,
-            isEnabled = true,
+            driveAccountLabel = ACCOUNT_NOT_SELECTED_LABEL,
+            isEnabled = false,
             sortOrder = 0
         )
+
+        private fun displayNameFromPath(folderPath: String): String {
+            return folderPath.trim()
+                .trim('/')
+                .substringAfterLast('/')
+                .ifBlank { DEFAULT_NAME }
+        }
     }
 }

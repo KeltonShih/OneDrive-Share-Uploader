@@ -4,8 +4,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -40,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OneDriveFolderPickerDialog(
     state: FolderPickerUiState,
@@ -67,6 +71,14 @@ fun OneDriveFolderPickerDialog(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
+                        text = stringResource(
+                            R.string.destination_account_label,
+                            state.driveAccountLabel ?: stringResource(R.string.no_onedrive_account_selected)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
                         text = stringResource(R.string.current_folder_path),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -80,13 +92,25 @@ fun OneDriveFolderPickerDialog(
 
                 HorizontalDivider()
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onRoot, enabled = !state.isLoading) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onRoot,
+                        enabled = !state.isLoading,
+                        modifier = Modifier.defaultMinSize(minWidth = 0.dp)
+                    ) {
                         Icon(Icons.Default.Home, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(stringResource(R.string.root))
                     }
-                    OutlinedButton(onClick = onRefresh, enabled = !state.isLoading) {
+                    OutlinedButton(
+                        onClick = onRefresh,
+                        enabled = !state.isLoading,
+                        modifier = Modifier.defaultMinSize(minWidth = 0.dp)
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(stringResource(R.string.refresh))
@@ -96,7 +120,8 @@ fun OneDriveFolderPickerDialog(
                             newFolderName = ""
                             showCreateFolderDialog = true
                         },
-                        enabled = !state.isLoading
+                        enabled = !state.isLoading,
+                        modifier = Modifier.defaultMinSize(minWidth = 0.dp)
                     ) {
                         Icon(Icons.Default.CreateNewFolder, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))

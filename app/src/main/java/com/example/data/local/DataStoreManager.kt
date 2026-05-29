@@ -116,15 +116,20 @@ class DataStoreManager(private val context: Context) {
                         ?: UploadDestination.DEFAULT_NAME
                     val folder = item.optString("folderPath").takeIf { it.isNotBlank() }
                         ?: defaultFolder
+                    val accountId = item.optString("driveAccountId").takeIf { it.isNotBlank() }
                     add(
                         UploadDestination(
                             id = id,
                             displayName = name,
                             folderPath = normalizeFolder(folder),
-                            driveAccountId = item.optString("driveAccountId").takeIf { it.isNotBlank() },
+                            driveAccountId = accountId,
                             driveAccountLabel = item.optString("driveAccountLabel").takeIf { it.isNotBlank() }
-                                ?: UploadDestination.CURRENT_ACCOUNT_LABEL,
-                            isEnabled = item.optBoolean("isEnabled", true),
+                                ?: if (accountId == null) {
+                                    UploadDestination.ACCOUNT_NOT_SELECTED_LABEL
+                                } else {
+                                    UploadDestination.CURRENT_ACCOUNT_LABEL
+                                },
+                            isEnabled = item.optBoolean("isEnabled", true) && accountId != null,
                             sortOrder = item.optInt("sortOrder", index)
                         )
                     )
@@ -159,12 +164,18 @@ class DataStoreManager(private val context: Context) {
         val source = destinations.ifEmpty { listOf(fallback) }
         return source
             .mapIndexed { index, destination ->
-                val name = destination.displayName.trim().ifBlank { UploadDestination.DEFAULT_NAME }
+                val folderPath = normalizeFolder(destination.folderPath.ifBlank { defaultFolder })
+                val name = resolvedDestinationName(destination.displayName, folderPath)
                 destination.copy(
                     displayName = name,
-                    folderPath = normalizeFolder(destination.folderPath.ifBlank { defaultFolder }),
+                    folderPath = folderPath,
                     driveAccountLabel = destination.driveAccountLabel
-                        ?: UploadDestination.CURRENT_ACCOUNT_LABEL,
+                        ?: if (destination.driveAccountId == null) {
+                            UploadDestination.ACCOUNT_NOT_SELECTED_LABEL
+                        } else {
+                            UploadDestination.CURRENT_ACCOUNT_LABEL
+                        },
+                    isEnabled = destination.isEnabled && destination.driveAccountId != null,
                     sortOrder = index
                 )
             }
@@ -173,5 +184,16 @@ class DataStoreManager(private val context: Context) {
     private fun normalizeFolder(path: String): String {
         val trimmed = path.trim().trim('/')
         return if (trimmed.isBlank()) "/" else "/$trimmed"
+    }
+
+    private fun resolvedDestinationName(displayName: String, folderPath: String): String {
+        val trimmedName = displayName.trim()
+        if (trimmedName.isNotBlank() && trimmedName != UploadDestination.DEFAULT_NAME) {
+            return trimmedName
+        }
+        return folderPath.trim()
+            .trim('/')
+            .substringAfterLast('/')
+            .ifBlank { UploadDestination.DEFAULT_NAME }
     }
 }

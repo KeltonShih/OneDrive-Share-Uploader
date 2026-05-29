@@ -302,7 +302,16 @@ fun DestinationPickerContent(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = destination.folderPath,
+                                text = stringResource(
+                                    R.string.destination_folder_label,
+                                    if (destination.driveAccountId.isNullOrBlank()) {
+                                        stringResource(R.string.no_onedrive_account_selected)
+                                    } else {
+                                        destination.driveAccountLabel
+                                            ?: stringResource(R.string.no_onedrive_account_selected)
+                                    },
+                                    destination.folderPath
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,

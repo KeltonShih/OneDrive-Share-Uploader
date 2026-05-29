@@ -20,6 +20,17 @@
     <string name="sign_in_with_microsoft">Sign In with Microsoft</string>
     <string name="signed_in_as">Signed in as:</string>
     <string name="sign_out">Sign Out</string>
+    <string name="onedrive_accounts_connected">%1$d OneDrive account(s) connected</string>
+    <string name="add_account">Add Account</string>
+    <string name="manage_accounts">Manage</string>
+    <string name="choose_onedrive_account">Choose OneDrive Account</string>
+    <string name="no_onedrive_accounts">No OneDrive accounts connected yet.</string>
+    <string name="no_onedrive_account_selected">Account not selected</string>
+    <string name="alias">Alias</string>
+    <string name="account_alias_title">Account Alias</string>
+    <string name="account_alias_label">Display name</string>
+    <string name="remove">Remove</string>
+    <string name="done">Done</string>
     <string name="auth_error">Authentication Error:\n%1$s</string>
     <string name="try_sign_in_again">Try Sign In Again</string>
     <string name="conflict_resolution">Conflict Resolution Behaviour</string>
@@ -53,13 +64,18 @@
     <string name="save">Save</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
+    <string name="confirm_delete_destination_title">Delete Destination?</string>
+    <string name="confirm_delete_destination_message">Delete “%1$s”? Existing upload tasks will keep their current records.</string>
+    <string name="confirm_remove_account_title">Remove Account?</string>
+    <string name="confirm_remove_account_message">Remove “%1$s”? Destinations using this account will be disabled.</string>
     <string name="upload_destinations">Upload Destinations</string>
     <string name="upload_destinations_desc">Create named upload destinations. When you share or open a file, choose the app first, then pick the destination in the dialog.</string>
     <string name="add_destination">Add Destination</string>
     <string name="edit_destination">Edit Destination</string>
     <string name="destination_name">Destination name</string>
     <string name="destination_account_label">OneDrive: %1$s</string>
-    <string name="destination_account_future_note">This destination currently uses the signed-in OneDrive account. Account selection will be available when multi-account support is added.</string>
+    <string name="destination_account_future_note">This destination uses its selected OneDrive account.</string>
+    <string name="destination_account_required_note">Each destination uploads to the selected OneDrive account. Choose an account before saving.</string>
     <string name="no_folder_selected">No folder selected yet</string>
 
     <string name="about_tagline">Fast share-to-OneDrive uploads</string>
@@ -71,6 +87,7 @@
     <string name="main_title">OneDrive Share Uploader</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="onedrive_connected">OneDrive Connected</string>
+    <string name="connected">Connected</string>
     <string name="disconnected">Disconnected</string>
     <string name="initializing">Initializing...</string>
     <string name="signin_required">Microsoft Account Sign-In Required</string>
@@ -80,6 +97,8 @@
     <string name="choose_upload_folder">Choose upload folder</string>
     <string name="upload_queue">Upload Queue</string>
     <string name="clear_done">Clear Done</string>
+    <string name="confirm_clear_done_title">Clear Completed Tasks?</string>
+    <string name="confirm_clear_done_message">Remove completed and canceled task records from this device?</string>
     <string name="upload">Upload</string>
     <string name="item_count_one">%1$d Item</string>
     <string name="item_count_many">%1$d Items</string>
@@ -123,6 +142,7 @@
     <string name="notification_channel_name">Uploads</string>
     <string name="notification_channel_desc">Shows live progress of OneDrive Share Uploader uploads.</string>
     <string name="error_token_required">Could not get Microsoft access token. Open Settings, confirm sign-in, then retry.</string>
+    <string name="error_account_token_required">Could not get Microsoft access token for %1$s. Open Settings, confirm that account is connected, then retry.</string>
     <string name="error_cache_missing">Temp cache file not found</string>
     <string name="error_cache_empty">Local cache file is empty</string>
     <string name="error_session_creation">Session creation error: %1$s</string>

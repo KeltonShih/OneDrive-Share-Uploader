@@ -14,8 +14,8 @@ android {
     applicationId = "com.keltonshih.onedriveshareuploader"
     minSdk = 26
     targetSdk = 36
-    versionCode = 3
-    versionName = "V3"
+    versionCode = 6
+    versionName = "V4.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -90,7 +90,6 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
-  implementation(libs.com.microsoft.identity.client.msal)
   implementation(libs.androidx.work.runtime.ktx)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)

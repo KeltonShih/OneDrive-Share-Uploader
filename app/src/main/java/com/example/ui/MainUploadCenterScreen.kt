@@ -15,6 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +50,7 @@ fun MainUploadCenterScreen(
     val completedCount = uploadTasks.count {
         it.status == UploadStatus.SUCCESS || it.status == UploadStatus.CANCELED
     }
+    var showClearDoneConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -87,16 +91,22 @@ fun MainUploadCenterScreen(
         },
         bottomBar = {
             val emailText = when (val auth = authState) {
-                is AuthState.SignedIn -> auth.account.username
+                is AuthState.AccountsLoaded -> {
+                    if (auth.accounts.size == 1) {
+                        auth.accounts.first().label
+                    } else {
+                        stringResource(R.string.onedrive_accounts_connected, auth.accounts.size)
+                    }
+                }
                 else -> stringResource(R.string.not_logged_in)
             }
             val statusColor = when (authState) {
-                is AuthState.SignedIn -> Color(0xFF48BB78) // Green
+                is AuthState.AccountsLoaded -> Color(0xFF48BB78) // Green
                 is AuthState.SignedOut -> Color(0xFFE53E3E) // Red
                 else -> Color(0xFFDD6B20) // Orange
             }
             val statusText = when (authState) {
-                is AuthState.SignedIn -> stringResource(R.string.onedrive_connected)
+                is AuthState.AccountsLoaded -> stringResource(R.string.onedrive_connected)
                 is AuthState.SignedOut -> stringResource(R.string.disconnected)
                 else -> stringResource(R.string.initializing)
             }
@@ -262,7 +272,16 @@ fun MainUploadCenterScreen(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = destination.folderPath,
+                                                text = stringResource(
+                                                    R.string.destination_folder_label,
+                                                    if (destination.driveAccountId.isNullOrBlank()) {
+                                                        stringResource(R.string.no_onedrive_account_selected)
+                                                    } else {
+                                                        destination.driveAccountLabel
+                                                            ?: stringResource(R.string.no_onedrive_account_selected)
+                                                    },
+                                                    destination.folderPath
+                                                ),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1,
@@ -271,6 +290,7 @@ fun MainUploadCenterScreen(
                                         }
                                         Switch(
                                             checked = destination.isEnabled,
+                                            enabled = !destination.driveAccountId.isNullOrBlank(),
                                             onCheckedChange = { enabled ->
                                                 viewModel.updateDestinationEnabled(destination.id, enabled)
                                             }
@@ -299,7 +319,7 @@ fun MainUploadCenterScreen(
                         ) {
                             if (completedCount > 0) {
                                 TextButton(
-                                    onClick = { viewModel.clearHistory() },
+                                    onClick = { showClearDoneConfirm = true },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                     modifier = Modifier.height(36.dp)
                                 ) {
@@ -366,6 +386,33 @@ fun MainUploadCenterScreen(
         }
     }
 
+    if (showClearDoneConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearDoneConfirm = false },
+            title = { Text(stringResource(R.string.confirm_clear_done_title)) },
+            text = { Text(stringResource(R.string.confirm_clear_done_message)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearHistory()
+                        showClearDoneConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text(stringResource(R.string.clear_done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDoneConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -421,7 +468,14 @@ fun UploadTaskCard(
                     Text(
                         text = stringResource(
                             R.string.destination_folder_label,
-                            job.destinationName,
+                            "${job.destinationName} · ${
+                                if (job.driveAccountId.isNullOrBlank()) {
+                                    stringResource(R.string.no_onedrive_account_selected)
+                                } else {
+                                    job.driveAccountLabel
+                                        ?: stringResource(R.string.no_onedrive_account_selected)
+                                }
+                            }",
                             job.targetFolder
                         ),
                         style = MaterialTheme.typography.bodySmall,

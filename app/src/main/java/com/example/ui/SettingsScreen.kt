@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.auth.AuthState
+import com.example.auth.OneDriveAccount
 import com.example.data.model.AppLanguage
 import com.example.data.model.ConflictBehavior
 import com.example.data.model.UploadDestination
@@ -38,16 +39,56 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings by viewModel.appSettings.collectAsState()
     val authState by viewModel.authState.collectAsState()
+    val accounts = when (val auth = authState) {
+        is AuthState.AccountsLoaded -> auth.accounts
+        else -> emptyList()
+    }
     val folderPickerState by viewModel.folderPickerState.collectAsState()
     val selectedLanguage = AppLanguage.fromCode(settings.languageCode)
     var showLanguageDialog by remember { mutableStateOf(false) }
     var editingDestination by remember { mutableStateOf<UploadDestination?>(null) }
+    var destinationDraftIsNew by remember { mutableStateOf(true) }
+    var destinationPendingDelete by remember { mutableStateOf<UploadDestination?>(null) }
     var showDestinationDialog by remember { mutableStateOf(false) }
     var folderPickerDestinationId by remember { mutableStateOf<String?>(null) }
     var folderPickerReturnsToDialog by remember { mutableStateOf(false) }
     var destinationDraftName by remember { mutableStateOf("") }
+    var destinationDraftNameTouched by remember { mutableStateOf(false) }
     var destinationDraftPath by remember { mutableStateOf("") }
+    var destinationDraftAccountId by remember { mutableStateOf<String?>(null) }
+    var destinationDraftAccountLabel by remember { mutableStateOf<String?>(null) }
+    var accountAliasTarget by remember { mutableStateOf<OneDriveAccount?>(null) }
+    var accountAliasDraft by remember { mutableStateOf("") }
+    var accountPendingRemove by remember { mutableStateOf<OneDriveAccount?>(null) }
+    var showManageAccountsDialog by remember { mutableStateOf(false) }
+    var showDestinationAccountDialog by remember { mutableStateOf(false) }
+    var selectAccountThenOpenFolder by remember { mutableStateOf(false) }
     val draftDestinationId = "__draft_destination__"
+
+    fun openFolderPickerForAccount(account: OneDriveAccount) {
+        destinationDraftAccountId = account.id
+        destinationDraftAccountLabel = account.label
+        folderPickerReturnsToDialog = true
+        folderPickerDestinationId = if (destinationDraftIsNew) {
+            draftDestinationId
+        } else {
+            editingDestination?.id ?: draftDestinationId
+        }
+        showDestinationDialog = false
+        viewModel.openFolderPicker(account)
+    }
+
+    fun browseWithSelectedAccount() {
+        val selectedAccount = accounts.firstOrNull { it.id == destinationDraftAccountId }
+        when {
+            selectedAccount != null -> openFolderPickerForAccount(selectedAccount)
+            accounts.size == 1 -> openFolderPickerForAccount(accounts.first())
+            else -> {
+                selectAccountThenOpenFolder = true
+                showDestinationAccountDialog = true
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -122,7 +163,12 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     val activity = context as? Activity ?: return@Button
-                                    viewModel.signIn(activity) { /* Handle Result Toast on MainActivity or inside Activity */ }
+                                    viewModel.signIn(activity) { result ->
+                                        result.getOrNull()?.let { account ->
+                                            accountAliasTarget = account
+                                            accountAliasDraft = account.label
+                                        }
+                                    }
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -137,35 +183,32 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                        is AuthState.SignedIn -> {
-                            Text(
-                                stringResource(R.string.signed_in_as),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = auth.account.username,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.testTag("msal_account_text")
-                            )
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.signOut { /* Done */ }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("msal_sign_out_button"),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
+                        is AuthState.AccountsLoaded -> {
+                            auth.accounts.forEach { account ->
+                                AccountStatusRow(
+                                    account = account,
+                                    onAlias = {
+                                        accountAliasTarget = account
+                                        accountAliasDraft = account.label
+                                    },
+                                    onRemove = { accountPendingRemove = account }
                                 )
+                            }
+                            Button(
+                                onClick = {
+                                    val activity = context as? Activity ?: return@Button
+                                    viewModel.signIn(activity) { result ->
+                                        result.getOrNull()?.let { account ->
+                                            accountAliasTarget = account
+                                            accountAliasDraft = account.label
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Logout, contentDescription = null)
-                                    Text(stringResource(R.string.sign_out))
-                                }
+                                Icon(Icons.Default.PersonAdd, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(R.string.add_account))
                             }
                         }
                         is AuthState.Error -> {
@@ -179,8 +222,7 @@ fun SettingsScreen(
                             )
                             Button(
                                 onClick = {
-                                    val activity = context as? Activity ?: return@Button
-                                    viewModel.signIn(activity) { }
+                                    viewModel.retryAuthInitialization()
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -268,8 +310,12 @@ fun SettingsScreen(
                         FilledTonalButton(
                             onClick = {
                                 editingDestination = null
+                                destinationDraftIsNew = true
                                 destinationDraftName = ""
+                                destinationDraftNameTouched = false
                                 destinationDraftPath = ""
+                                destinationDraftAccountId = null
+                                destinationDraftAccountLabel = null
                                 showDestinationDialog = true
                             },
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
@@ -294,12 +340,16 @@ fun SettingsScreen(
                             canDelete = settings.uploadDestinations.size > 1,
                             onEdit = {
                                 editingDestination = destination
+                                destinationDraftIsNew = isDefaultPlaceholderDestination(destination)
                                 destinationDraftName = destination.displayName
+                                destinationDraftNameTouched = !isDefaultPlaceholderDestination(destination)
                                 destinationDraftPath = destination.folderPath
+                                destinationDraftAccountId = destination.driveAccountId
+                                destinationDraftAccountLabel = destination.driveAccountLabel
                                 showDestinationDialog = true
                             },
                             onDelete = {
-                                viewModel.deleteDestination(destination.id)
+                                destinationPendingDelete = destination
                             }
                         )
                     }
@@ -446,48 +496,6 @@ fun SettingsScreen(
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFFFF1F1) // PolishErrorContainer
-                ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF2B8B5)) // PolishErrorBorder
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.history_clean_actions),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        text = stringResource(R.string.history_clean_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(
-                        onClick = { viewModel.clearHistory() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("clear_history_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Default.DeleteForever, contentDescription = null)
-                            Text(stringResource(R.string.clear_completed_history))
-                        }
-                    }
-                }
-            }
-
-            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onNavigateToAbout() },
@@ -572,32 +580,91 @@ fun SettingsScreen(
     }
 
     if (showDestinationDialog) {
+        val visibleDestinationDraftName = if (
+            shouldAutoNameDestination(destinationDraftName, destinationDraftPath, destinationDraftNameTouched)
+        ) {
+            folderNameFromPath(destinationDraftPath)
+        } else {
+            destinationDraftName
+        }
         DestinationEditDialog(
             destination = editingDestination,
-            initialName = destinationDraftName,
-            initialPath = destinationDraftPath,
-            onDismiss = { showDestinationDialog = false },
-            onBrowse = { name, path ->
+            name = visibleDestinationDraftName,
+            path = destinationDraftPath,
+            accountLabel = destinationDraftAccountLabel,
+            onNameChange = { name ->
                 destinationDraftName = name
-                destinationDraftPath = path
-                folderPickerReturnsToDialog = true
-                folderPickerDestinationId = editingDestination?.id ?: draftDestinationId
-                showDestinationDialog = false
-                viewModel.openFolderPicker()
+                destinationDraftNameTouched = true
+            },
+            onDismiss = { showDestinationDialog = false },
+            onBrowse = {
+                if (destinationDraftIsNew) {
+                    destinationDraftName = ""
+                    destinationDraftNameTouched = false
+                }
+                browseWithSelectedAccount()
+            },
+            onChooseAccount = {
+                selectAccountThenOpenFolder = false
+                showDestinationAccountDialog = true
             },
             onSave = { name, path ->
+                val accountId = destinationDraftAccountId ?: return@DestinationEditDialog
+                val accountLabel = destinationDraftAccountLabel ?: return@DestinationEditDialog
                 val editing = editingDestination
+                val savedName = if (
+                    shouldAutoNameDestination(name, path, destinationDraftNameTouched)
+                ) {
+                    folderNameFromPath(path)
+                } else {
+                    name
+                }
                 if (editing == null) {
-                    viewModel.addDestination(name, path)
+                    viewModel.addDestination(savedName, path, accountId, accountLabel)
                 } else {
                     viewModel.updateDestination(
                         editing.copy(
-                            displayName = name,
-                            folderPath = path
+                            displayName = savedName,
+                            folderPath = path,
+                            driveAccountId = accountId,
+                            driveAccountLabel = accountLabel,
+                            isEnabled = true
                         )
                     )
                 }
                 showDestinationDialog = false
+            }
+        )
+    }
+
+    if (showManageAccountsDialog) {
+        ManageAccountsDialog(
+            accounts = accounts,
+            onDismiss = { showManageAccountsDialog = false },
+            onRename = { account, alias ->
+                viewModel.renameAccount(account.id, alias) { }
+            },
+            onRemove = { account ->
+                viewModel.removeAccount(account.id) { }
+            }
+        )
+    }
+
+    if (showDestinationAccountDialog) {
+        OneDriveAccountPickerDialog(
+            accounts = accounts,
+            onDismiss = {
+                showDestinationAccountDialog = false
+                selectAccountThenOpenFolder = false
+            },
+            onSelect = { account ->
+                showDestinationAccountDialog = false
+                destinationDraftAccountId = account.id
+                destinationDraftAccountLabel = account.label
+                if (selectAccountThenOpenFolder) {
+                    selectAccountThenOpenFolder = false
+                    openFolderPickerForAccount(account)
+                }
             }
         )
     }
@@ -621,6 +688,16 @@ fun SettingsScreen(
                 val id = folderPickerDestinationId
                 if (folderPickerReturnsToDialog || id == draftDestinationId) {
                     destinationDraftPath = selectedPath
+                    if (
+                        shouldAutoNameDestination(
+                            destinationDraftName,
+                            selectedPath,
+                            destinationDraftNameTouched
+                        )
+                    ) {
+                        destinationDraftName = folderNameFromPath(selectedPath)
+                        destinationDraftNameTouched = false
+                    }
                     showDestinationDialog = true
                 } else {
                     id?.let {
@@ -644,6 +721,151 @@ fun SettingsScreen(
                 viewModel.loadFolderChildren(null, "")
             }
         )
+    }
+
+    val destinationToDelete = destinationPendingDelete
+    if (destinationToDelete != null) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.confirm_delete_destination_title),
+            message = stringResource(
+                R.string.confirm_delete_destination_message,
+                destinationToDelete.displayName
+            ),
+            confirmText = stringResource(R.string.delete),
+            onDismiss = { destinationPendingDelete = null },
+            onConfirm = {
+                viewModel.deleteDestination(destinationToDelete.id)
+                destinationPendingDelete = null
+            }
+        )
+    }
+
+    val accountToAlias = accountAliasTarget
+    if (accountToAlias != null) {
+        AccountAliasDialog(
+            account = accountToAlias,
+            alias = accountAliasDraft,
+            onAliasChange = { accountAliasDraft = it },
+            onDismiss = { accountAliasTarget = null },
+            onSave = {
+                viewModel.renameAccount(accountToAlias.id, accountAliasDraft) { }
+                accountAliasTarget = null
+            }
+        )
+    }
+
+    val accountToRemove = accountPendingRemove
+    if (accountToRemove != null) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.confirm_remove_account_title),
+            message = stringResource(
+                R.string.confirm_remove_account_message,
+                accountToRemove.label
+            ),
+            confirmText = stringResource(R.string.remove),
+            onDismiss = { accountPendingRemove = null },
+            onConfirm = {
+                viewModel.removeAccount(accountToRemove.id) { }
+                accountPendingRemove = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun AccountStatusRow(
+    account: OneDriveAccount,
+    onAlias: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF48BB78))
+                    )
+                    Text(
+                        text = stringResource(R.string.connected),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = account.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (account.username != account.label) {
+                    Text(
+                        text = account.username,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                TextButton(onClick = onAlias) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.edit))
+                }
+                TextButton(
+                    onClick = onRemove,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.delete))
+                }
+            }
+        }
     }
 }
 
@@ -690,8 +912,11 @@ private fun DestinationSettingsRow(
                 Text(
                     text = stringResource(
                         R.string.destination_account_label,
-                        destination.driveAccountLabel
-                            ?: UploadDestination.CURRENT_ACCOUNT_LABEL
+                        if (destination.driveAccountId.isNullOrBlank()) {
+                            stringResource(R.string.no_onedrive_account_selected)
+                        } else {
+                            destination.driveAccountLabel ?: UploadDestination.CURRENT_ACCOUNT_LABEL
+                        }
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -737,19 +962,15 @@ private fun DestinationSettingsRow(
 @Composable
 private fun DestinationEditDialog(
     destination: UploadDestination?,
-    initialName: String,
-    initialPath: String,
+    name: String,
+    path: String,
+    accountLabel: String?,
+    onNameChange: (String) -> Unit,
     onDismiss: () -> Unit,
-    onBrowse: (String, String) -> Unit,
+    onBrowse: () -> Unit,
+    onChooseAccount: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
-    var name by remember(destination?.id) {
-        mutableStateOf(initialName)
-    }
-    val path = remember(destination?.id, initialPath) {
-        mutableStateOf(initialPath)
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -765,30 +986,44 @@ private fun DestinationEditDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = onNameChange,
                     label = { Text(stringResource(R.string.destination_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedButton(
-                    onClick = { onBrowse(name, path.value) },
+                    onClick = onChooseAccount,
                     modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.ManageAccounts, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        accountLabel?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.no_onedrive_account_selected),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                OutlinedButton(
+                    onClick = onBrowse,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !accountLabel.isNullOrBlank()
                 ) {
                     Icon(Icons.Default.FolderOpen, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.choose_upload_folder))
                 }
                 Text(
-                    text = path.value.ifBlank { stringResource(R.string.no_folder_selected) },
+                    text = path.ifBlank { stringResource(R.string.no_folder_selected) },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (path.value.isBlank()) {
+                    color = if (path.isBlank()) {
                         MaterialTheme.colorScheme.error
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
                 Text(
-                    text = stringResource(R.string.destination_account_future_note),
+                    text = stringResource(R.string.destination_account_required_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -796,12 +1031,262 @@ private fun DestinationEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(name, path.value) },
-                enabled = name.isNotBlank() && path.value.isNotBlank()
+                onClick = { onSave(name, path) },
+                enabled = name.isNotBlank() && path.isNotBlank() && !accountLabel.isNullOrBlank()
             ) {
                 Text(stringResource(R.string.save))
             }
         },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun ManageAccountsDialog(
+    accounts: List<OneDriveAccount>,
+    onDismiss: () -> Unit,
+    onRename: (OneDriveAccount, String) -> Unit,
+    onRemove: (OneDriveAccount) -> Unit
+) {
+    var renamingAccount by remember { mutableStateOf<OneDriveAccount?>(null) }
+    var accountPendingRemove by remember { mutableStateOf<OneDriveAccount?>(null) }
+    var aliasDraft by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.manage_accounts)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (accounts.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.no_onedrive_accounts),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    accounts.forEach { account ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = null)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = account.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (account.username != account.label) {
+                                    Text(
+                                        text = account.username,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = {
+                                    renamingAccount = account
+                                    aliasDraft = account.label
+                                }
+                            ) {
+                                Text(stringResource(R.string.alias))
+                            }
+                            TextButton(
+                                onClick = { accountPendingRemove = account },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text(stringResource(R.string.remove))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.done))
+            }
+        }
+    )
+
+    val accountToRename = renamingAccount
+    if (accountToRename != null) {
+        AlertDialog(
+            onDismissRequest = { renamingAccount = null },
+            title = { Text(stringResource(R.string.account_alias_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = accountToRename.username,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = aliasDraft,
+                        onValueChange = { aliasDraft = it },
+                        label = { Text(stringResource(R.string.account_alias_label)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRename(accountToRename, aliasDraft)
+                        renamingAccount = null
+                    }
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renamingAccount = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    val accountToRemove = accountPendingRemove
+    if (accountToRemove != null) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.confirm_remove_account_title),
+            message = stringResource(
+                R.string.confirm_remove_account_message,
+                accountToRemove.label
+            ),
+            confirmText = stringResource(R.string.remove),
+            onDismiss = { accountPendingRemove = null },
+            onConfirm = {
+                onRemove(accountToRemove)
+                accountPendingRemove = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun AccountAliasDialog(
+    account: OneDriveAccount,
+    alias: String,
+    onAliasChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.account_alias_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = account.username,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = alias,
+                    onValueChange = onAliasChange,
+                    label = { Text(stringResource(R.string.account_alias_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onSave) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun OneDriveAccountPickerDialog(
+    accounts: List<OneDriveAccount>,
+    onDismiss: () -> Unit,
+    onSelect: (OneDriveAccount) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.choose_onedrive_account)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (accounts.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.no_onedrive_accounts),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    accounts.forEach { account ->
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    account.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingContent = {
+                                Icon(Icons.Default.AccountCircle, contentDescription = null)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(account) }
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
@@ -821,4 +1306,21 @@ private fun languageLabel(language: AppLanguage): String {
         AppLanguage.KO -> stringResource(R.string.language_ko)
         AppLanguage.ES -> stringResource(R.string.language_es)
     }
+}
+
+private fun folderNameFromPath(path: String): String {
+    return path.trim()
+        .trim('/')
+        .substringAfterLast('/')
+        .ifBlank { UploadDestination.DEFAULT_NAME }
+}
+
+private fun isDefaultPlaceholderDestination(destination: UploadDestination): Boolean {
+    return destination.id == UploadDestination.DEFAULT_ID ||
+        destination.displayName == UploadDestination.DEFAULT_NAME
+}
+
+private fun shouldAutoNameDestination(name: String, path: String, nameTouched: Boolean): Boolean {
+    return path.isNotBlank() &&
+        (!nameTouched || name.isBlank() || name == UploadDestination.DEFAULT_NAME)
 }
