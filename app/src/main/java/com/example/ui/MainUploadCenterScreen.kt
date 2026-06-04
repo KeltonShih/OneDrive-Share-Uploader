@@ -540,21 +540,35 @@ fun UploadTaskCard(
                                 Text(stringResource(R.string.cancel), fontSize = 12.sp)
                             }
                         }
-                        isFailed && job.localCachePath.isNotBlank() -> {
-                            Button(
-                                onClick = onRetry,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFB3261E),
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(stringResource(R.string.retry), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        isFailed -> {
+                            Column(horizontalAlignment = Alignment.End) {
+                                if (job.localCachePath.isNotBlank()) {
+                                    Button(
+                                        onClick = onRetry,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFFB3261E),
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(stringResource(R.string.retry), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                TextButton(
+                                    onClick = onDelete,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(stringResource(R.string.clear), fontSize = 12.sp)
+                                }
                             }
                         }
-                        isFinished || isFailed -> {
+                        isFinished -> {
                             TextButton(
                                 onClick = onDelete,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),

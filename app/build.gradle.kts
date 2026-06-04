@@ -14,8 +14,8 @@ android {
     applicationId = "com.keltonshih.onedriveshareuploader"
     minSdk = 26
     targetSdk = 36
-    versionCode = 6
-    versionName = "V4.2"
+    versionCode = 7
+    versionName = "V4.2.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
