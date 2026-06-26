@@ -30,6 +30,9 @@ interface UploadJobDao {
     @Query("SELECT * FROM upload_jobs WHERE status = 'QUEUED' ORDER BY createdAt ASC LIMIT 1")
     suspend fun getNextQueuedJob(): UploadJobEntity?
 
+    @Query("SELECT COUNT(*) FROM upload_jobs WHERE status = 'WAITING_CONFLICT'")
+    suspend fun countWaitingConflictJobs(): Int
+
     @Query("UPDATE upload_jobs SET status = 'QUEUED', updatedAt = :now WHERE status = 'UPLOADING'")
     suspend fun resetUploadingJobsToQueued(now: Long)
 

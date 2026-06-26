@@ -22,6 +22,7 @@ data class UploadJobEntity(
     val totalBytes: Long,
     val errorMessage: String?,
     val uploadedFileName: String?,
+    val conflictChoice: ConflictBehavior?,
     val createdAt: Long,
     val updatedAt: Long,
     val completedAt: Long?,

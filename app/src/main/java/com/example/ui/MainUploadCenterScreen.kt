@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.auth.AuthState
+import com.example.data.model.ConflictBehavior
 import com.example.data.model.UploadJobEntity
 import com.example.data.model.UploadStatus
 import java.text.SimpleDateFormat
@@ -50,7 +51,12 @@ fun MainUploadCenterScreen(
     val completedCount = uploadTasks.count {
         it.status == UploadStatus.SUCCESS || it.status == UploadStatus.CANCELED
     }
+    val conflictJob = uploadTasks.firstOrNull { it.status == UploadStatus.WAITING_CONFLICT }
     var showClearDoneConfirm by remember { mutableStateOf(false) }
+    var selectedConflictJobId by remember { mutableStateOf<String?>(null) }
+    val selectedConflictJob = uploadTasks.firstOrNull {
+        it.id == selectedConflictJobId && it.status == UploadStatus.WAITING_CONFLICT
+    }
 
     Scaffold(
         topBar = {
@@ -378,6 +384,7 @@ fun MainUploadCenterScreen(
                             onRetry = { viewModel.retryJob(job) },
                             onDelete = { viewModel.deleteJob(job) },
                             onCancel = { viewModel.cancelJob(job) },
+                            onResolveConflict = { selectedConflictJobId = job.id },
                             modifier = Modifier.animateItemPlacement()
                         )
                     }
@@ -413,6 +420,24 @@ fun MainUploadCenterScreen(
         )
     }
 
+    val dialogConflictJob = selectedConflictJob ?: conflictJob
+    if (dialogConflictJob != null) {
+        FileConflictDialog(
+            job = dialogConflictJob,
+            onRename = {
+                viewModel.resolveConflict(dialogConflictJob, ConflictBehavior.RENAME)
+                selectedConflictJobId = null
+            },
+            onReplace = {
+                viewModel.resolveConflict(dialogConflictJob, ConflictBehavior.REPLACE)
+                selectedConflictJobId = null
+            },
+            onCancelUpload = {
+                viewModel.cancelJob(dialogConflictJob)
+                selectedConflictJobId = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -421,20 +446,24 @@ fun UploadTaskCard(
     onRetry: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
+    onResolveConflict: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isFinished = job.status == UploadStatus.SUCCESS || job.status == UploadStatus.CANCELED
     val isFailed = job.status == UploadStatus.FAILED
+    val isWaitingConflict = job.status == UploadStatus.WAITING_CONFLICT
     val savedAsName = job.uploadedFileName?.takeIf {
         it.isNotBlank() && it != job.sanitizedFileName
     }
     val cardColor = when (job.status) {
+        UploadStatus.WAITING_CONFLICT -> Color(0xFFFFF8E1)
         UploadStatus.FAILED -> Color(0xFFFFF1F1)
         UploadStatus.SUCCESS -> Color(0xFFEFF8F0)
         UploadStatus.CANCELED -> Color(0xFFF3F4F6)
         else -> MaterialTheme.colorScheme.surface
     }
     val borderColor = when (job.status) {
+        UploadStatus.WAITING_CONFLICT -> Color(0xFFFFD54F)
         UploadStatus.FAILED -> Color(0xFFF2B8B5)
         UploadStatus.SUCCESS -> Color(0xFFB7DDBB)
         else -> MaterialTheme.colorScheme.outline
@@ -498,7 +527,11 @@ fun UploadTaskCard(
                             else -> statusLabel(job.status)
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isFailed) Color(0xFFB3261E) else MaterialTheme.colorScheme.primary,
+                        color = when {
+                            isFailed -> Color(0xFFB3261E)
+                            isWaitingConflict -> Color(0xFF8A5200)
+                            else -> MaterialTheme.colorScheme.primary
+                        },
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -538,6 +571,28 @@ fun UploadTaskCard(
                                 Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(stringResource(R.string.cancel), fontSize = 12.sp)
+                            }
+                        }
+                        isWaitingConflict -> {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Button(
+                                    onClick = onResolveConflict,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text(stringResource(R.string.resolve), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TextButton(
+                                    onClick = onCancel,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(stringResource(R.string.cancel), fontSize = 12.sp)
+                                }
                             }
                         }
                         isFailed -> {
@@ -583,7 +638,7 @@ fun UploadTaskCard(
                 }
             }
 
-            if (!isFinished && !isFailed) {
+            if (!isFinished && !isFailed && !isWaitingConflict) {
                 val progressFloat = job.progress / 100f
                 LinearProgressIndicator(
                     progress = { progressFloat },
@@ -608,7 +663,7 @@ fun UploadTaskCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = if (isFinished || isFailed) statusLabel(job.status) else "${job.progress}%",
+                    text = if (isFinished || isFailed || isWaitingConflict) statusLabel(job.status) else "${job.progress}%",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -616,6 +671,44 @@ fun UploadTaskCard(
             }
         }
     }
+}
+
+@Composable
+fun FileConflictDialog(
+    job: UploadJobEntity,
+    onRename: () -> Unit,
+    onReplace: () -> Unit,
+    onCancelUpload: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.file_conflict_title)) },
+        text = {
+            Text(
+                stringResource(
+                    R.string.file_conflict_message,
+                    job.originalFileName,
+                    job.destinationName,
+                    job.targetFolder
+                )
+            )
+        },
+        confirmButton = {
+            Button(onClick = onRename) {
+                Text(stringResource(R.string.rename))
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onCancelUpload) {
+                    Text(stringResource(R.string.cancel))
+                }
+                TextButton(onClick = onReplace) {
+                    Text(stringResource(R.string.overwrite))
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -696,6 +789,7 @@ fun StatusBadge(status: UploadStatus) {
         UploadStatus.COPYING -> Pair(Color(0xFFE0F7FA), Color(0xFF006064))
         UploadStatus.QUEUED -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))
         UploadStatus.UPLOADING -> Pair(Color(0xFFE8F5E9), Color(0xFF1B5E20))
+        UploadStatus.WAITING_CONFLICT -> Pair(Color(0xFFFFF8E1), Color(0xFF8A5200))
         UploadStatus.SUCCESS -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32))
         UploadStatus.FAILED -> Pair(Color(0xFFFFEBEE), Color(0xFFC62828))
         UploadStatus.CANCELED -> Pair(Color(0xFFECEFF1), Color(0xFF37474F))
@@ -775,7 +869,8 @@ fun formatTaskSizeText(job: UploadJobEntity): String {
     val totalText = "$total $totalUnit"
     val isDone = job.status == UploadStatus.SUCCESS ||
         job.status == UploadStatus.CANCELED ||
-        job.status == UploadStatus.FAILED
+        job.status == UploadStatus.FAILED ||
+        job.status == UploadStatus.WAITING_CONFLICT
 
     if (isDone) {
         return stringResource(R.string.size_label, totalText)
@@ -809,6 +904,7 @@ fun statusLabel(status: UploadStatus): String {
         UploadStatus.COPYING -> stringResource(R.string.copying)
         UploadStatus.QUEUED -> stringResource(R.string.queued)
         UploadStatus.UPLOADING -> stringResource(R.string.uploading)
+        UploadStatus.WAITING_CONFLICT -> stringResource(R.string.waiting_for_choice)
         UploadStatus.SUCCESS -> stringResource(R.string.completed)
         UploadStatus.FAILED -> stringResource(R.string.failed)
         UploadStatus.CANCELED -> stringResource(R.string.canceled)

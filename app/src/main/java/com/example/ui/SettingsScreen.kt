@@ -401,6 +401,7 @@ fun SettingsScreen(
                             Column {
                                 Text(
                                     text = when (behavior) {
+                                        ConflictBehavior.ASK -> stringResource(R.string.conflict_ask_title)
                                         ConflictBehavior.RENAME -> stringResource(R.string.conflict_rename_title)
                                         ConflictBehavior.REPLACE -> stringResource(R.string.conflict_replace_title)
                                         ConflictBehavior.FAIL -> stringResource(R.string.conflict_fail_title)
@@ -409,6 +410,7 @@ fun SettingsScreen(
                                 )
                                 Text(
                                     text = when (behavior) {
+                                        ConflictBehavior.ASK -> stringResource(R.string.conflict_ask_desc)
                                         ConflictBehavior.RENAME -> stringResource(R.string.conflict_rename_desc)
                                         ConflictBehavior.REPLACE -> stringResource(R.string.conflict_replace_desc)
                                         ConflictBehavior.FAIL -> stringResource(R.string.conflict_fail_desc)

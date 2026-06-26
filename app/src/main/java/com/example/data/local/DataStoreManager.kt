@@ -37,9 +37,9 @@ class DataStoreManager(private val context: Context) {
         AppSettings(
             defaultFolder = defaultFolder,
             conflictBehavior = try {
-                ConflictBehavior.valueOf(preferences[CONFLICT_BEHAVIOR_KEY] ?: ConflictBehavior.RENAME.name)
+                ConflictBehavior.valueOf(preferences[CONFLICT_BEHAVIOR_KEY] ?: ConflictBehavior.ASK.name)
             } catch (e: Exception) {
-                ConflictBehavior.RENAME
+                ConflictBehavior.ASK
             },
             wifiOnly = preferences[WIFI_ONLY_KEY] ?: false,
             rulesEnabled = preferences[RULES_ENABLED_KEY] ?: false,

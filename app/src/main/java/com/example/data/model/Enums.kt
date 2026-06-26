@@ -4,12 +4,14 @@ enum class UploadStatus {
     COPYING,
     QUEUED,
     UPLOADING,
+    WAITING_CONFLICT,
     SUCCESS,
     FAILED,
     CANCELED
 }
 
 enum class ConflictBehavior {
+    ASK,
     RENAME,
     REPLACE,
     FAIL

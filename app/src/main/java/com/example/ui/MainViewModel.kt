@@ -181,6 +181,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             totalBytes = finalSize,
                             errorMessage = textContext.getString(R.string.queued_for_upload),
                             uploadedFileName = null,
+                            conflictChoice = null,
                             createdAt = now,
                             updatedAt = now,
                             completedAt = null,
@@ -221,6 +222,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             errorMessage = error.message
                                 ?: FileHelper.unreadableSourceMessage(uri),
                             uploadedFileName = null,
+                            conflictChoice = null,
                             createdAt = now,
                             updatedAt = now,
                             completedAt = null,
@@ -245,6 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 status = UploadStatus.QUEUED,
                 errorMessage = null,
                 progress = 0,
+                conflictChoice = null,
                 updatedAt = System.currentTimeMillis(),
                 completedAt = null
             )
@@ -281,6 +284,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     // Ignore cache cleanup failures.
                 }
             }
+        }
+    }
+
+    fun resolveConflict(job: UploadJobEntity, behavior: ConflictBehavior) {
+        viewModelScope.launch {
+            val updated = job.copy(
+                status = UploadStatus.QUEUED,
+                progress = 0,
+                uploadedBytes = 0L,
+                errorMessage = null,
+                conflictChoice = behavior,
+                updatedAt = System.currentTimeMillis(),
+                completedAt = null
+            )
+            repository.updateJob(updated)
+            triggerWorkManager()
         }
     }
 

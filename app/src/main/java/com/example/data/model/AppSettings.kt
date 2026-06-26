@@ -2,7 +2,7 @@ package com.example.data.model
 
 data class AppSettings(
     val defaultFolder: String = "/Upload",
-    val conflictBehavior: ConflictBehavior = ConflictBehavior.RENAME,
+    val conflictBehavior: ConflictBehavior = ConflictBehavior.ASK,
     val wifiOnly: Boolean = false,
     val rulesEnabled: Boolean = false,
     val languageCode: String = AppLanguage.SYSTEM.code,

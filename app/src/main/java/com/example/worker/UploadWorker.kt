@@ -48,7 +48,9 @@ class UploadWorker(
     companion object {
         private const val TAG = "UploadWorker"
         private const val CHANNEL_ID = "UploadsChannel"
+        private const val CONFLICT_CHANNEL_ID = "UploadConflictsChannelV1"
         private const val NOTIFICATION_ID = 1001
+        private const val CONFLICT_NOTIFICATION_ID = 1003
 
         // Chunk size for upload session: must be a multiple of 320 KiB (327,680 bytes)
         // 5 * 320 KiB = 1.6 MiB is an excellent responsive chunk size for mobile.
@@ -150,17 +152,29 @@ class UploadWorker(
 
         // Read settings for behavior
         val settings = dataStore.appSettingsFlow.first()
-        val conflictBehaviorStr = when (settings.conflictBehavior) {
-            ConflictBehavior.RENAME -> "rename"
-            ConflictBehavior.REPLACE -> "replace"
-            ConflictBehavior.FAIL -> "fail"
-        }
 
         // 3. Resolve destination URL path
         val cleanFolder = uploadingJob.targetFolder.trim('/')
         updateJobStage(uploadingJob, t(R.string.upload_stage_preparing_folder))
         ensureFolderPathExists(token, cleanFolder)
         val encodedPath = buildEncodedPath(cleanFolder, uploadingJob.sanitizedFileName)
+        val selectedConflictBehavior = uploadingJob.conflictChoice ?: settings.conflictBehavior
+
+        if (
+            settings.conflictBehavior == ConflictBehavior.ASK &&
+            uploadingJob.conflictChoice == null &&
+            targetFileExists(token, encodedPath)
+        ) {
+            markJobWaitingForConflict(uploadingJob)
+            return
+        }
+
+        val conflictBehaviorStr = when (selectedConflictBehavior) {
+            ConflictBehavior.ASK -> "fail"
+            ConflictBehavior.RENAME -> "rename"
+            ConflictBehavior.REPLACE -> "replace"
+            ConflictBehavior.FAIL -> "fail"
+        }
 
         // Decide Upload API: Small PUT (<= 250MB) vs chunked Session (> 250MB)
         if (fileLength <= 250 * 1024 * 1024) {
@@ -218,8 +232,12 @@ class UploadWorker(
                 markJobSuccess(job, parseDriveItemName(responseBody))
             } else {
                 val errorBody = response.body?.string() ?: ""
-                val errorMessage = parseErrorMessage(response, errorBody)
-                markJobFailed(job, errorMessage)
+                if (conflictBehavior == "fail" && isNameConflict(response, errorBody)) {
+                    markJobWaitingForConflict(job)
+                } else {
+                    val errorMessage = parseErrorMessage(response, errorBody)
+                    markJobFailed(job, errorMessage)
+                }
             }
         }
     }
@@ -256,8 +274,12 @@ class UploadWorker(
                 uploadUrl = respJson.getString("uploadUrl")
             } else {
                 val errorBody = response.body?.string() ?: ""
-                val errorMessage = t(R.string.error_session_creation, parseErrorMessage(response, errorBody))
-                markJobFailed(job, errorMessage)
+                if (conflictBehavior == "fail" && isNameConflict(response, errorBody)) {
+                    markJobWaitingForConflict(job)
+                } else {
+                    val errorMessage = t(R.string.error_session_creation, parseErrorMessage(response, errorBody))
+                    markJobFailed(job, errorMessage)
+                }
                 return
             }
         }
@@ -392,6 +414,23 @@ class UploadWorker(
         }
     }
 
+    private fun targetFileExists(token: String, encodedPath: String): Boolean {
+        val request = Request.Builder()
+            .url("https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath?\$select=id,name")
+            .get()
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        executeRequest(request).use { response ->
+            val body = response.body?.string() ?: ""
+            return when {
+                response.isSuccessful -> true
+                response.code == 404 -> false
+                else -> throw IllegalStateException(parseErrorMessage(response, body))
+            }
+        }
+    }
+
     private suspend fun markJobSuccess(job: UploadJobEntity, uploadedFileName: String?) {
         val successJob = job.copy(
             status = UploadStatus.SUCCESS,
@@ -421,6 +460,19 @@ class UploadWorker(
             completedAt = null
         )
         repository.updateJob(failedJob)
+    }
+
+    private suspend fun markJobWaitingForConflict(job: UploadJobEntity) {
+        val waitingJob = job.copy(
+            status = UploadStatus.WAITING_CONFLICT,
+            progress = 0,
+            uploadedBytes = 0L,
+            errorMessage = t(R.string.conflict_waiting_message),
+            updatedAt = System.currentTimeMillis(),
+            completedAt = null
+        )
+        repository.updateJob(waitingJob)
+        showConflictNotification(waitingJob)
     }
 
     private suspend fun updateJobStage(job: UploadJobEntity, message: String) {
@@ -459,6 +511,16 @@ class UploadWorker(
         } catch (e: Exception) {
             "HTTP ${response.code}: ${response.message} (Raw: $body)"
         }
+    }
+
+    private fun isNameConflict(response: Response, body: String): Boolean {
+        if (response.code != 409) return false
+        return runCatching {
+            val error = JSONObject(body).optJSONObject("error")
+            val code = error?.optString("code").orEmpty()
+            code.equals("nameAlreadyExists", ignoreCase = true) ||
+                error?.optString("message").orEmpty().contains("already exists", ignoreCase = true)
+        }.getOrDefault(true)
     }
 
     private fun parseDriveItemName(body: String?): String? {
@@ -520,7 +582,7 @@ class UploadWorker(
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun showSummaryNotification() {
+    private suspend fun showSummaryNotification() {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -531,16 +593,83 @@ class UploadWorker(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val completedNotification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(t(R.string.notification_summary_title))
-            .setContentText(t(R.string.notification_summary_text))
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+        val waitingConflictCount = repository.countWaitingConflictJobs()
+        val hasWaitingConflict = waitingConflictCount > 0
+        val completedNotification = NotificationCompat.Builder(
+            context,
+            if (hasWaitingConflict) CONFLICT_CHANNEL_ID else CHANNEL_ID
+        )
+            .setContentTitle(
+                if (hasWaitingConflict) {
+                    t(R.string.notification_conflict_title)
+                } else {
+                    t(R.string.notification_summary_title)
+                }
+            )
+            .setContentText(
+                if (hasWaitingConflict) {
+                    t(R.string.notification_conflict_summary_text, waitingConflictCount)
+                } else {
+                    t(R.string.notification_summary_text)
+                }
+            )
+            .setSmallIcon(
+                if (hasWaitingConflict) {
+                    android.R.drawable.stat_notify_error
+                } else {
+                    android.R.drawable.stat_sys_upload_done
+                }
+            )
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(
+                if (hasWaitingConflict) {
+                    NotificationCompat.PRIORITY_HIGH
+                } else {
+                    NotificationCompat.PRIORITY_DEFAULT
+                }
+            )
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .apply {
+                if (hasWaitingConflict) {
+                    setCategory(NotificationCompat.CATEGORY_REMINDER)
+                    setDefaults(NotificationCompat.DEFAULT_ALL)
+                    setVibrate(longArrayOf(0, 280, 120, 280))
+                }
+            }
             .build()
 
         notificationManager.notify(NOTIFICATION_ID + 1, completedNotification)
+    }
+
+    private fun showConflictNotification(job: UploadJobEntity) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val text = t(R.string.notification_conflict_text, job.originalFileName)
+        val notification = NotificationCompat.Builder(context, CONFLICT_CHANNEL_ID)
+            .setContentTitle(t(R.string.notification_conflict_title))
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 280, 120, 280))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setTicker(t(R.string.notification_conflict_title))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .build()
+
+        notificationManager.notify(CONFLICT_NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel() {
@@ -553,6 +682,18 @@ class UploadWorker(
                 description = t(R.string.notification_channel_desc)
             }
             notificationManager.createNotificationChannel(channel)
+
+            val conflictChannel = NotificationChannel(
+                CONFLICT_CHANNEL_ID,
+                t(R.string.notification_conflict_channel_name),
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = t(R.string.notification_conflict_channel_desc)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 280, 120, 280)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(conflictChannel)
         }
     }
 
